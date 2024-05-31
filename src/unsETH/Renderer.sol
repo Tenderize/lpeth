@@ -15,7 +15,7 @@ import { Initializable } from "@openzeppelin/upgradeable/proxy/utils/Initializab
 import { UUPSUpgradeable } from "@openzeppelin/upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import { OwnableUpgradeable } from "@openzeppelin/upgradeable/access/OwnableUpgradeable.sol";
 
-import { Metadata } from "@/unsETH/UnsETH.sol";
+import { UnsETH } from "@/unsETH/UnsETH.sol";
 import { Base64 } from "@/unsETH/Base64.sol";
 import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 
@@ -35,7 +35,7 @@ contract Renderer {
      * @notice Returns the JSON metadata for a given unlock
      * @param data metadata for the token
      */
-    function json(Metadata memory data) external pure returns (string memory) {
+    function json(UnsETH.Request memory data) external pure returns (string memory) {
         return string(
             abi.encodePacked(
                 "data:application/json;base64,",
@@ -51,7 +51,7 @@ contract Renderer {
         );
     }
 
-    function svg(Metadata memory data) external pure returns (string memory) {
+    function svg(UnsETH.Request memory data) external pure returns (string memory) {
         return string(
             abi.encodePacked(
                 '<svg width="290" height="500" viewBox="0 0 290 500" xmlns="http://www.w3.org/2000/svg"',
@@ -77,7 +77,7 @@ contract Renderer {
         );
     }
 
-    function _serializeMetadata(Metadata memory data) internal pure returns (string memory metadataString) {
+    function _serializeMetadata(UnsETH.Request memory data) internal pure returns (string memory metadataString) {
         metadataString = string(
             abi.encodePacked(
                 '{"trait_type": "createdAt", "value":',

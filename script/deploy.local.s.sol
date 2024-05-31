@@ -46,12 +46,8 @@ contract DeployLocal is Script {
         console2.log("UnsETH Implementation: %s", unsETH_impl);
         console2.log("UnsETH Proxy: %s", address(unsETHProxy));
 
-        ConstructorConfig memory config = ConstructorConfig({
-            registry: registryProxy,
-            lpToken: lpToken,
-            unsETH: address(unsETHProxy),
-            treasury: address(0)
-        });
+        ConstructorConfig memory config =
+            ConstructorConfig({ registry: registryProxy, lpToken: lpToken, unsETH: unsETHProxy, treasury: address(0) });
 
         address lpETH_impl = address(new LpETH{ salt: salt }(config));
         LpETH lpETHProxy = LpETH(payable(address(new ERC1967Proxy{ salt: salt }(lpETH_impl, ""))));

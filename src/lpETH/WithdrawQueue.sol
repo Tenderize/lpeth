@@ -11,12 +11,14 @@
 
 pragma solidity >=0.8.20;
 
+// TODO: safeTransferETH
+
 library WithdrawQueue {
     error NotFinalized(uint256 id);
     error InsufficientMsgvalue();
     error Unauthorized();
 
-    struct WithdrawRequest {
+    struct Request {
         uint128 amount; // original request amount
         uint128 claimed; // amount claimed
         uint256 cumulative; // cumulative lifetime requested
@@ -28,18 +30,18 @@ library WithdrawQueue {
         uint256 tail;
         uint256 lifetimeFinalized;
         uint128 partiallyFinalizedAmount;
-        mapping(uint256 id => WithdrawRequest) queue;
+        mapping(uint256 id => Request) queue;
     }
 
     function createRequest(Data storage $, uint128 amount, address payable account) external returns (uint256 id) {
         // start head at 1
         id = ++$.tail;
-        $.queue[id] = WithdrawRequest(amount, 0, $.queue[id - 1].cumulative + amount, account);
+        $.queue[id] = Request(amount, 0, $.queue[id - 1].cumulative + amount, account);
         if ($.head == 0) $.head = 1;
     }
 
     function claimRequest(Data storage $, uint256 id) external returns (uint256 amount) {
-        WithdrawRequest storage req = $.queue[id];
+        Request storage req = $.queue[id];
         if (msg.sender != req.account) revert Unauthorized();
         if (id < $.head) {
             amount = req.amount - req.claimed;
@@ -68,14 +70,18 @@ library WithdrawQueue {
 
     function getClaimableForRequest(Data storage $, uint256 id) external view returns (uint256) {
         if (id < $.head) {
-            WithdrawRequest memory req = $.queue[id];
+            Request memory req = $.queue[id];
             return req.amount - req.claimed;
         } else if (id == $.head) {
-            WithdrawRequest memory req = $.queue[id];
+            Request memory req = $.queue[id];
             return $.partiallyFinalizedAmount - req.claimed;
         } else {
             return 0;
         }
+    }
+
+    function getRequest(Data storage $, uint256 id) external view returns (Request memory) {
+        return $.queue[id];
     }
 
     function length(Data storage $) external view returns (uint256) {

@@ -29,23 +29,22 @@ pragma solidity >=0.8.20;
 
 // solhint-disable quotes
 
-/// @title Unlocks
-/// @notice ERC721 contract for unlock tokens
-/// @dev Creates an NFT for staked tokens pending unlock. Each Unlock has an amount and a maturity date.
-
-struct Metadata {
-    uint256 requestId; // request id
-    uint256 amount; // expected amount to receive
-    uint256 createdAt; // block number
-    address derivative; // address of the derivative LST/LRT
-}
-
 contract UnsETH is Initializable, UUPSUpgradeable, OwnableUpgradeable, ERC721, ERC721Receiver {
+    /// @title Unlocks
+    /// @notice ERC721 contract for unlock tokens
+    /// @dev Creates an NFT for staked tokens pending unlock. Each Unlock has an amount and a maturity date.
+
+    struct Request {
+        uint256 requestId; // request id
+        uint256 amount; // expected amount to receive
+        uint256 createdAt; // block timestamp
+        address derivative; // address of the derivative LST/LRT
+    }
+
     address private immutable LPETH;
     Registry private immutable REGISTRY;
     Renderer private immutable RENDERER;
-
-    mapping(uint256 => Metadata) public metadata;
+    mapping(uint256 => Request) private requests;
 
     error NotOwnerOf(uint256 tokenId, address owner, address sender);
     error InvalidID();
@@ -88,10 +87,10 @@ contract UnsETH is Initializable, UUPSUpgradeable, OwnableUpgradeable, ERC721, E
             (uint256, uint256)
         );
 
-        Metadata memory _metadata =
-            Metadata({ requestId: requestId, amount: amountExpected, createdAt: block.timestamp, derivative: asset });
+        Request memory _metadata =
+            Request({ requestId: requestId, amount: amountExpected, createdAt: block.timestamp, derivative: asset });
         tokenId = uint256(keccak256(abi.encodePacked(asset, requestId)));
-        metadata[tokenId] = _metadata;
+        requests[tokenId] = _metadata;
         _safeMint(msg.sender, tokenId);
     }
 
@@ -100,7 +99,7 @@ contract UnsETH is Initializable, UUPSUpgradeable, OwnableUpgradeable, ERC721, E
             revert NotOwnerOf(tokenId, ownerOf(tokenId), msg.sender);
         }
 
-        Metadata memory _metadata = metadata[tokenId];
+        Request memory _metadata = requests[tokenId];
 
         amount = abi.decode(
             AdapterDelegateCall._delegatecall(
@@ -110,18 +109,22 @@ contract UnsETH is Initializable, UUPSUpgradeable, OwnableUpgradeable, ERC721, E
             (uint256)
         );
 
-        delete metadata[tokenId];
         _burn(tokenId);
+        delete requests[tokenId];
         SafeTransferLib.safeTransferETH(msg.sender, amount);
     }
 
     function isFinalized(uint256 tokenId) external view returns (bool) {
-        Metadata memory _metadata = metadata[tokenId];
+        Request memory _metadata = requests[tokenId];
         return REGISTRY.adapters(_metadata.derivative).isFinalized(_metadata.requestId);
     }
 
     function minMaxAmount(address asset) external view returns (uint256 min, uint256 max) {
         return REGISTRY.adapters(asset).minMaxAmount();
+    }
+
+    function getRequest(uint256 tokenId) external view returns (Request memory) {
+        return requests[tokenId];
     }
 
     /**
@@ -134,7 +137,7 @@ contract UnsETH is Initializable, UUPSUpgradeable, OwnableUpgradeable, ERC721, E
             revert InvalidID();
         }
 
-        Metadata memory data = metadata[tokenId];
+        Request memory data = requests[tokenId];
         // TODO: this gives an error atm
         // return RENDERER.json(data);
     }

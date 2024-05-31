@@ -61,11 +61,11 @@ contract UnsETHTest is Test, ERC721Receiver {
         uint256 expectedTokenId = uint256(keccak256(abi.encodePacked(address(myETH), expectedRequestId)));
         assertEq(tokenId, expectedTokenId);
         assertEq(outAmount, expectedAmount);
-        (uint256 id, uint256 _amount, uint256 createdAt, address derivative) = unsETH.metadata(tokenId);
-        assertEq(id, expectedRequestId);
-        assertEq(_amount, expectedAmount);
-        assertEq(createdAt, block.timestamp);
-        assertEq(derivative, address(myETH));
+        UnsETH.Request memory request = unsETH.getRequest(tokenId);
+        assertEq(request.requestId, expectedRequestId);
+        assertEq(request.amount, expectedAmount);
+        assertEq(request.createdAt, block.timestamp);
+        assertEq(request.derivative, address(myETH));
 
         assertEq(unsETH.ownerOf(tokenId), address(this));
     }

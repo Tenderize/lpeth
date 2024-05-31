@@ -13,7 +13,7 @@ pragma solidity >=0.8.20;
 
 import { Registry } from "@/Registry.sol";
 import { LPToken } from "@/lpETH/LPToken.sol";
-import { UnsETH, Metadata } from "@/unsETH/UnsETH.sol";
+import { UnsETH } from "@/unsETH/UnsETH.sol";
 import { UnsETHQueue } from "@/lpETH/UnsETHQueue.sol";
 import { Adapter } from "@/adapters/Adapter.sol";
 import { WithdrawQueue } from "@/lpETH/WithdrawQueue.sol";
@@ -47,7 +47,7 @@ UD60x18 constant MIN_LP_CUT = UD60x18.wrap(0.2e18);
 struct ConstructorConfig {
     Registry registry;
     LPToken lpToken;
-    address unsETH;
+    UnsETH unsETH;
     address treasury;
 }
 
@@ -68,6 +68,7 @@ abstract contract LpETHEvents {
     error ErrorDepositSharesZero();
     error ErrorRecoveryMode();
     error GaugeZero();
+    error ErrorInsufficientAmount();
 
     event Deposit(address indexed from, uint256 amount, uint256 lpSharesMinted);
     event Withdraw(address indexed to, uint256 amount, uint256 lpSharesBurnt, uint256 requestId);
@@ -136,7 +137,7 @@ contract LpETH is
 
     LPToken private immutable LPTOKEN = LPToken(address(0));
     Registry private immutable REGISTRY = Registry(address(0));
-    address payable private immutable UNSETH = payable(0xA2FE2b9298c03AF9C5d885e62Bc04F77a7Ff91BF);
+    UnsETH private immutable UNSETH = UnsETH(payable(0xA2FE2b9298c03AF9C5d885e62Bc04F77a7Ff91BF));
     address payable private immutable TREASURY = payable(0x5542b58080FEE48dBE6f38ec0135cE9011519d96);
 
     function initialize() public initializer {
@@ -150,8 +151,8 @@ contract LpETH is
     constructor(ConstructorConfig memory config) {
         REGISTRY = config.registry;
         LPTOKEN = config.lpToken;
+        UNSETH = config.unsETH;
         TREASURY = payable(config.treasury);
-        UNSETH = payable(config.unsETH);
         _disableInitializers();
     }
 
@@ -186,7 +187,7 @@ contract LpETH is
     function withdraw(uint256 amount, uint256 maxLpSharesBurnt) external returns (uint256 requestId) {
         Data storage $ = _loadStorageSlot();
 
-        uint256 available = ud(amount).mul(ud($.unlocking).div(ud($.liabilities))).unwrap();
+        uint256 available = ud(amount).mul(UNIT_60x18.sub(ud($.unlocking).div(ud($.liabilities)))).unwrap();
 
         requestId = $.withdrawQueue.createRequest(uint128(amount - available), payable(msg.sender));
 
@@ -210,10 +211,10 @@ contract LpETH is
 
     function quote(address asset, uint256 amount) external view returns (uint256 out) {
         SwapParams memory p = _getSwapParams(asset);
-        (out,) = _quote(asset, amount, p);
+        out = _quote(asset, amount, p);
     }
 
-    function swap(address asset, uint256 amount, uint256 minOut) external returns (uint256 out, uint256 fee) {
+    function swap(address asset, uint256 amount, uint256 minOut) external returns (uint256 out) {
         Data storage $ = _loadStorageSlot();
 
         SwapParams memory p = _getSwapParams(asset);
@@ -228,10 +229,11 @@ contract LpETH is
         // (uint256 min, uint256 max) = adapter.minMaxAmount();
 
         SafeTransferLib.safeTransferFrom(asset, msg.sender, address(this), amount);
-        SafeTransferLib.safeApprove(asset, UNSETH, amount);
-        (uint256 tokenId, uint256 amountExpected) = UnsETH(UNSETH).requestWithdraw(asset, amount);
+        SafeTransferLib.safeApprove(asset, address(UNSETH), amount);
+        (uint256 tokenId, uint256 amountExpected) = UNSETH.requestWithdraw(asset, amount);
 
-        (out, fee) = _quote(asset, amount, p);
+        (out) = _quote(asset, amount, p);
+        uint256 fee = amount - out;
 
         // Revert if slippage threshold is exceeded, i.e. if `out` is less than `minOut`
         if (out < minOut) revert ErrorSlippage(out, minOut);
@@ -259,26 +261,26 @@ contract LpETH is
         // get oldest item from unlock queue
         UnsETHQueue.Item memory unlock = $.unsETHQueue.popHead().data;
 
-        if (!UnsETH(UNSETH).isFinalized(unlock.tokenId)) revert ErrorNotFinalized(unlock.tokenId);
+        if (!UNSETH.isFinalized(unlock.tokenId)) revert ErrorNotFinalized(unlock.tokenId);
 
-        (, uint256 amountExpected,, address derivative) = UnsETH(UNSETH).metadata(unlock.tokenId);
-        uint256 amountReceived = UnsETH(UNSETH).claimWithdraw(unlock.tokenId);
+        UnsETH.Request memory request = UNSETH.getRequest(unlock.tokenId);
+        uint256 amountReceived = UNSETH.claimWithdraw(unlock.tokenId);
 
-        uint256 fee = _doRecovery(amountReceived, amountExpected, unlock.fee);
+        uint256 fee = _doRecovery(amountReceived, request.amount, unlock.fee);
 
         // update pool state with liabilities
         {
             // - Update unlocking
-            uint256 unlocked = _min(amountExpected, amountReceived);
+            uint256 unlocked = _min(request.amount, amountReceived);
             $.unlocking -= unlocked;
-            uint256 ufa = $.unlockingForAsset[derivative] - unlocked;
+            uint256 ufa = $.unlockingForAsset[request.derivative] - unlocked;
             // - Update S if unlockingForAsset is now zero
             if (ufa == 0) {
-                $.S = $.S.sub($.lastSupplyForAsset[derivative]);
-                $.lastSupplyForAsset[derivative] = ZERO_60x18;
+                $.S = $.S.sub($.lastSupplyForAsset[request.derivative]);
+                $.lastSupplyForAsset[request.derivative] = ZERO_60x18;
             }
             // - Update unlockingForAsset
-            $.unlockingForAsset[derivative] = ufa;
+            $.unlockingForAsset[request.derivative] = ufa;
         }
 
         // account for rewards and fees
@@ -315,22 +317,22 @@ contract LpETH is
         for (uint256 i = 0; i < n; i++) {
             // get oldest item from unlock queue
             UnsETHQueue.Item memory unlock = $.unsETHQueue.popHead().data;
-            if (!UnsETH(UNSETH).isFinalized(unlock.tokenId)) break;
+            if (!UNSETH.isFinalized(unlock.tokenId)) break;
 
-            (, uint256 amountExpected,, address derivative) = UnsETH(UNSETH).metadata(unlock.tokenId);
-            uint256 amountReceived = UnsETH(UNSETH).claimWithdraw(unlock.tokenId);
+            UnsETH.Request memory request = UNSETH.getRequest(unlock.tokenId);
+            uint256 amountReceived = UNSETH.claimWithdraw(unlock.tokenId);
             totalFee += unlock.fee;
-            totalExpected += amountExpected;
+            totalExpected += request.amount;
             totalReceived += amountReceived;
 
-            uint256 ufa = $.unlockingForAsset[derivative] - _min(amountReceived, amountExpected);
+            uint256 ufa = $.unlockingForAsset[request.derivative] - _min(amountReceived, request.amount);
             // - Update S if unlockingForAsset is now zero
             if (ufa == 0) {
-                $.S = $.S.sub($.lastSupplyForAsset[derivative]);
-                $.lastSupplyForAsset[derivative] = ZERO_60x18;
+                $.S = $.S.sub($.lastSupplyForAsset[request.derivative]);
+                $.lastSupplyForAsset[request.derivative] = ZERO_60x18;
             }
             // - Update unlockingForAsset
-            $.unlockingForAsset[derivative] = ufa;
+            $.unlockingForAsset[request.derivative] = ufa;
             tokenIds[i] = unlock.tokenId;
         }
 
@@ -363,7 +365,7 @@ contract LpETH is
         emit BatchUnlockRedeemed(msg.sender, totalReceived, relayerReward, lpReward, tokenIds);
     }
 
-    function buyUnlock() external returns (uint256 tokenId) {
+    function buyUnlock() external payable returns (uint256 tokenId) {
         Data storage $ = _loadStorageSlot();
 
         // Can not purchase unlocks in recovery mode
@@ -373,9 +375,9 @@ contract LpETH is
         // get newest item from unlock queue
         UnsETHQueue.Item memory unlock = $.unsETHQueue.popTail().data;
         tokenId = unlock.tokenId;
-        if (UnsETH(UNSETH).isFinalized(tokenId)) revert ErrorIsFinalized(tokenId);
+        if (UNSETH.isFinalized(tokenId)) revert ErrorIsFinalized(tokenId);
 
-        (, uint256 amountExpected, uint256 createdAt, address derivative) = UnsETH(UNSETH).metadata(tokenId);
+        UnsETH.Request memory request = UNSETH.getRequest(tokenId);
 
         // Calculate the reward for purchasing the unlock
         // The base reward is the fee minus the MIN_LP_CUT going to liquidity providers and minus the TREASURY_CUT going
@@ -390,7 +392,7 @@ contract LpETH is
             lpCut = fee60x18.mul(MIN_LP_CUT).unwrap();
             treasuryCut = fee60x18.mul(TREASURY_CUT).unwrap();
             uint256 baseReward = unlock.fee - lpCut - treasuryCut;
-            UD60x18 progress = ud(createdAt - block.number).div(ud(UNSETH_EXPIRATION_TIME));
+            UD60x18 progress = ud(request.createdAt - block.number).div(ud(UNSETH_EXPIRATION_TIME));
             reward = ud(baseReward).mul(UNIT_60x18.sub(progress)).unwrap();
             // Adjust lpCut by the remaining amount after subtracting the reward
             // This step seems to adjust lpCut to balance out the distribution
@@ -400,38 +402,38 @@ contract LpETH is
 
         // Update pool state
         // - update unlocking
-        $.unlocking -= amountExpected;
+        $.unlocking -= request.amount;
         // - Update liabilities to distribute LP rewards
         $.liabilities += lpCut;
         // - Update treasury rewards
         $.treasuryRewards += treasuryCut;
 
-        uint256 ufa = $.unlockingForAsset[derivative] - amountExpected;
+        uint256 ufa = $.unlockingForAsset[request.derivative] - request.amount;
         // - Update S if unlockingForAsset is now zero
         if (ufa == 0) {
-            $.S = $.S.sub($.lastSupplyForAsset[derivative]);
-            $.lastSupplyForAsset[derivative] = ZERO_60x18;
+            $.S = $.S.sub($.lastSupplyForAsset[request.derivative]);
+            $.lastSupplyForAsset[request.derivative] = ZERO_60x18;
         }
         // - Update unlockingForAsset
-        $.unlockingForAsset[derivative] = ufa;
+        $.unlockingForAsset[request.derivative] = ufa;
 
         // Finalize requests
         {
-            uint256 amountToFinalize = amountExpected - unlock.fee;
+            uint256 amountToFinalize = request.amount - unlock.fee;
             $.withdrawQueue.finalizeRequests(amountToFinalize);
         }
 
         // transfer unlock amount minus reward from caller to pool
         // the reward is the discount paid. 'reward < unlock.fee' always.
-        SafeTransferLib.safeTransferFrom(derivative, msg.sender, address(this), amountExpected - reward);
+        if (msg.value < request.amount - reward) revert ErrorInsufficientAmount();
 
         // transfer unlock to caller
-        UnsETH(UNSETH).safeTransferFrom(address(this), msg.sender, tokenId);
+        UNSETH.safeTransferFrom(address(this), msg.sender, tokenId);
 
-        emit UnlockBought(msg.sender, tokenId, amountExpected, reward, lpCut);
+        emit UnlockBought(msg.sender, tokenId, request.amount, reward, lpCut);
     }
 
-    function batchBuyUnlock(uint256 n) external {
+    function batchBuyUnlock(uint256 n) external payable {
         Data storage $ = _loadStorageSlot();
 
         // Can not purchase unlocks in recovery mode
@@ -448,10 +450,10 @@ contract LpETH is
         for (uint256 i = 0; i < n; i++) {
             // get newest item from unlock queue
             UnsETHQueue.Item memory unlock = $.unsETHQueue.popTail().data;
-            if (UnsETH(UNSETH).isFinalized(unlock.tokenId)) break;
-            (, uint256 amountExpected, uint256 createdAt, address derivative) = UnsETH(UNSETH).metadata(unlock.tokenId);
-            if (block.timestamp - createdAt > UNSETH_EXPIRATION_TIME) break;
-            totalAmountExpected += amountExpected;
+            if (UNSETH.isFinalized(unlock.tokenId)) break;
+            UnsETH.Request memory request = UNSETH.getRequest(unlock.tokenId);
+            if (block.timestamp - request.createdAt > UNSETH_EXPIRATION_TIME) break;
+            totalAmountExpected += request.amount;
             tokenIds[i] = unlock.tokenId;
             uint256 reward;
             {
@@ -459,7 +461,7 @@ contract LpETH is
                 uint256 lpCut = fee60x18.mul(MIN_LP_CUT).unwrap();
                 uint256 treasuryCut = fee60x18.mul(TREASURY_CUT).unwrap();
                 uint256 baseReward = unlock.fee - lpCut - treasuryCut;
-                UD60x18 progress = ud(createdAt - block.number).div(ud(UNSETH_EXPIRATION_TIME));
+                UD60x18 progress = ud(request.createdAt - block.number).div(ud(UNSETH_EXPIRATION_TIME));
                 reward = ud(baseReward).mul(UNIT_60x18.sub(progress)).unwrap();
                 // Adjust lpCut by the remaining amount after subtracting the reward
                 // This step seems to adjust lpCut to balance out the distribution
@@ -470,21 +472,21 @@ contract LpETH is
                 totalTreasuryCut += treasuryCut;
             }
 
-            uint256 ufa = $.unlockingForAsset[derivative] - amountExpected;
+            uint256 ufa = $.unlockingForAsset[request.derivative] - request.amount;
             // - Update S if unlockingForAsset is now zero
             if (ufa == 0) {
-                $.S = $.S.sub($.lastSupplyForAsset[derivative]);
-                $.lastSupplyForAsset[derivative] = ZERO_60x18;
+                $.S = $.S.sub($.lastSupplyForAsset[request.derivative]);
+                $.lastSupplyForAsset[request.derivative] = ZERO_60x18;
             }
             // - Update unlockingForAsset
-            $.unlockingForAsset[derivative] = ufa;
+            $.unlockingForAsset[request.derivative] = ufa;
 
             // transfer unlock amount minus reward from caller to pool
             // the reward is the discount paid. 'reward < unlock.fee' always.
-            SafeTransferLib.safeTransferFrom(derivative, msg.sender, address(this), amountExpected - reward);
+            if (msg.value < request.amount - reward) revert ErrorInsufficientAmount();
 
             // transfer unlock to caller
-            UnsETH(UNSETH).safeTransferFrom(address(this), msg.sender, unlock.tokenId);
+            UNSETH.safeTransferFrom(address(this), msg.sender, unlock.tokenId);
         }
 
         // Update pool state
@@ -533,6 +535,14 @@ contract LpETH is
     function claimWithdrawRequest(uint256 id) external returns (uint256 amount) {
         amount = _loadStorageSlot().withdrawQueue.claimRequest(id);
         emit ClaimWithdrawRequest(id, msg.sender, amount);
+    }
+
+    function getWithdrawRequest(uint256 id) external view returns (WithdrawQueue.Request memory) {
+        return _loadStorageSlot().withdrawQueue.getRequest(id);
+    }
+
+    function getClaimableForWithdrawRequest(uint256 id) external view returns (uint256) {
+        return _loadStorageSlot().withdrawQueue.getClaimableForRequest(id);
     }
 
     function lpToken() external view returns (address) {
@@ -600,15 +610,7 @@ contract LpETH is
         }
     }
 
-    function _quote(
-        address asset,
-        uint256 amount,
-        SwapParams memory p
-    )
-        internal
-        view
-        returns (uint256 out, uint256 fee)
-    {
+    function _quote(address asset, uint256 amount, SwapParams memory p) internal view returns (uint256 out) {
         Data storage $ = _loadStorageSlot();
         UD60x18 x = ud(amount);
         UD60x18 nom = _calculateNominator(x, p, $);
@@ -616,7 +618,7 @@ contract LpETH is
 
         UD60x18 gauge = getFeeGauge(asset);
         // total fee = gauge x (baseFee * amount + nom/denom)
-        fee = BASE_FEE.mul(x).add(nom.div(denom)).mul(gauge).unwrap();
+        uint256 fee = BASE_FEE.mul(x).add(nom.div(denom)).mul(gauge).unwrap();
         fee = fee >= amount ? amount : fee;
         unchecked {
             out = amount - fee;

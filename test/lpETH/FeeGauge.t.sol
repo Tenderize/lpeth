@@ -6,6 +6,7 @@ import { VmSafe } from "forge-std/Vm.sol";
 import { LpETH, LpETHEvents, ConstructorConfig } from "@/lpETH/LpETH.sol";
 import { LPToken } from "@/lpETH/LPToken.sol";
 import { Registry } from "@/Registry.sol";
+import { UnsETH } from "@/unsETH/UnsETH.sol";
 
 import { UD60x18, UNIT, ud } from "@prb/math/UD60x18.sol";
 
@@ -18,7 +19,7 @@ contract LPETH_FeeGauge_Test is Test {
         ConstructorConfig memory config = ConstructorConfig({
             registry: Registry(address(8)),
             lpToken: LPToken(address(9)),
-            unsETH: address(11),
+            unsETH: UnsETH(payable(address(11))),
             treasury: address(10)
         });
         LpETH lpETH_impl = new LpETH(config);
