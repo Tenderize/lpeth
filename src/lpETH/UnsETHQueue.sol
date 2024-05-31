@@ -9,14 +9,14 @@
 //
 // Copyright (c) Tenderize Labs Ltd
 
+pragma solidity >=0.8.20;
+
 /**
  * @notice This file implements the necessary functionality for a double-ended queue or deque.
  * Elements can be popped from the front or back, but the deque can only be appended to.
  * It is used to store a list of unlocks for a given TenderSwap pool.
  * @dev modified from https://github.com/Tenderize/tenderswap/blob/main/src/UnlockQueue.sol
  */
-pragma solidity >=0.8.20;
-
 library UnsETHQueue {
     error QueueEmpty();
     error IdExists();

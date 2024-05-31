@@ -25,7 +25,7 @@ import { Adapter, AdapterDelegateCall } from "@/adapters/Adapter.sol";
 
 // TODO: ERC165 for adapters
 
-pragma solidity >=0.8.19;
+pragma solidity >=0.8.20;
 
 // solhint-disable quotes
 
