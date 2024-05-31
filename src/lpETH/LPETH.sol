@@ -12,11 +12,11 @@
 pragma solidity >=0.8.20;
 
 import { Registry } from "@/Registry.sol";
-import { LPToken } from "@/LPToken.sol";
+import { LPToken } from "@/lpETH/LPToken.sol";
 import { UnsETH, Metadata } from "@/unsETH/UnsETH.sol";
-import { UnsETHQueue } from "@/UnsETHQueue.sol";
+import { UnsETHQueue } from "@/lpETH/UnsETHQueue.sol";
 import { Adapter } from "@/adapters/Adapter.sol";
-import { WithdrawQueue } from "@/WithdrawQueue.sol";
+import { WithdrawQueue } from "@/lpETH/WithdrawQueue.sol";
 import { ERC721Receiver } from "@/utils/ERC721Receiver.sol";
 
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
@@ -47,9 +47,8 @@ UD60x18 constant MIN_LP_CUT = UD60x18.wrap(0.2e18);
 struct ConstructorConfig {
     Registry registry;
     LPToken lpToken;
-    address treasury;
     address unsETH;
-    address withdrawQueue;
+    address treasury;
 }
 
 struct SwapParams {
@@ -71,7 +70,8 @@ abstract contract LpETHEvents {
     error GaugeZero();
 
     event Deposit(address indexed from, uint256 amount, uint256 lpSharesMinted);
-    event Withdraw(address indexed to, uint256 amount, uint256 lpSharesBurnt);
+    event Withdraw(address indexed to, uint256 amount, uint256 lpSharesBurnt, uint256 requestId);
+    event ClaimWithdrawRequest(uint256 indexed requestId, address indexed to, uint256 amount);
     event Swap(address indexed caller, address indexed asset, uint256 amountIn, uint256 fee, uint256 unlockId);
     event UnlockBought(address indexed caller, uint256 tokenId, uint256 amount, uint256 reward, uint256 lpFees);
     event UnlockRedeemed(address indexed relayer, uint256 tokenId, uint256 amount, uint256 reward, uint256 lpFees);
@@ -99,6 +99,8 @@ abstract contract LpETHStorage {
         uint256 treasuryRewards;
         // Unlock queue to hold unlocks
         UnsETHQueue.Data unsETHQueue;
+        // Withdraw request queue
+        WithdrawQueue.Data withdrawQueue;
         // amount unlocking per asset
         mapping(address asset => uint256 unlocking) unlockingForAsset;
         // last supply of a tenderizer when seen, tracked because they are rebasing tokens
@@ -130,12 +132,12 @@ contract LPETH is
     ERC721Receiver
 {
     using UnsETHQueue for UnsETHQueue.Data;
+    using WithdrawQueue for WithdrawQueue.Data;
 
     LPToken private immutable LPTOKEN = LPToken(address(0));
     Registry private immutable REGISTRY = Registry(address(0));
-    address payable private immutable TREASURY = payable(0x5542b58080FEE48dBE6f38ec0135cE9011519d96);
     address payable private immutable UNSETH = payable(0xA2FE2b9298c03AF9C5d885e62Bc04F77a7Ff91BF);
-    address payable private immutable WITHDRAW_QUEUE = payable(address(0));
+    address payable private immutable TREASURY = payable(0x5542b58080FEE48dBE6f38ec0135cE9011519d96);
 
     function initialize() public initializer {
         __Ownable_init(msg.sender);
@@ -150,7 +152,6 @@ contract LPETH is
         LPTOKEN = config.lpToken;
         TREASURY = payable(config.treasury);
         UNSETH = payable(config.unsETH);
-        WITHDRAW_QUEUE = payable(config.withdrawQueue);
         _disableInitializers();
     }
 
@@ -187,7 +188,7 @@ contract LPETH is
 
         uint256 available = ud(amount).mul(ud($.unlocking).div(ud($.liabilities))).unwrap();
 
-        requestId = WithdrawQueue(WITHDRAW_QUEUE).createRequest(uint128(amount - available), payable(msg.sender));
+        requestId = $.withdrawQueue.createRequest(uint128(amount - available), payable(msg.sender));
 
         // Calculate LP tokens to burn
         uint256 lpShares =
@@ -204,7 +205,7 @@ contract LPETH is
         // Transfer available tokens to caller
         payable(msg.sender).transfer(available);
 
-        emit Withdraw(msg.sender, amount, lpShares);
+        emit Withdraw(msg.sender, amount, lpShares, requestId);
     }
 
     function quote(address asset, uint256 amount) external view returns (uint256 out) {
@@ -299,7 +300,7 @@ contract LPETH is
         // Finalize requests
         {
             uint256 amountToFinalize = amountReceived - unlock.fee;
-            WithdrawQueue(WITHDRAW_QUEUE).finalizeRequests{ value: amountToFinalize }();
+            $.withdrawQueue.finalizeRequests(amountToFinalize);
         }
 
         emit UnlockRedeemed(msg.sender, unlock.tokenId, amountReceived, relayerReward, lpReward);
@@ -356,7 +357,7 @@ contract LPETH is
         // Finalize requests
         {
             uint256 amountToFinalize = totalReceived - totalFee;
-            WithdrawQueue(WITHDRAW_QUEUE).finalizeRequests{ value: amountToFinalize }();
+            $.withdrawQueue.finalizeRequests(amountToFinalize);
         }
 
         emit BatchUnlockRedeemed(msg.sender, totalReceived, relayerReward, lpReward, tokenIds);
@@ -417,7 +418,7 @@ contract LPETH is
         // Finalize requests
         {
             uint256 amountToFinalize = amountExpected - unlock.fee;
-            WithdrawQueue(WITHDRAW_QUEUE).finalizeRequests{ value: amountToFinalize }();
+            $.withdrawQueue.finalizeRequests(amountToFinalize);
         }
 
         // transfer unlock amount minus reward from caller to pool
@@ -497,7 +498,7 @@ contract LPETH is
         // Finalize requests
         {
             uint256 amountToFinalize = totalAmountExpected - totalRewards - totalLpCut - totalTreasuryCut;
-            WithdrawQueue(WITHDRAW_QUEUE).finalizeRequests{ value: amountToFinalize }();
+            $.withdrawQueue.finalizeRequests(amountToFinalize);
         }
 
         emit BatchUnlockBought(msg.sender, totalAmountExpected, totalRewards, totalLpCut, tokenIds);
@@ -527,6 +528,11 @@ contract LPETH is
         $.treasuryRewards = 0;
 
         payable(TREASURY).transfer(treasuryReward);
+    }
+
+    function claimWithdrawRequest(uint256 id) external returns (uint256 amount) {
+        amount = _loadStorageSlot().withdrawQueue.claimRequest(id);
+        emit ClaimWithdrawRequest(id, msg.sender, amount);
     }
 
     function lpToken() external view returns (address) {

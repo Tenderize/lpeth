@@ -3,7 +3,7 @@ pragma solidity >=0.8.20;
 import { Test, console } from "forge-std/Test.sol";
 import { VmSafe } from "forge-std/Vm.sol";
 
-import { LPToken } from "@/LPToken.sol";
+import { LPToken } from "@/lpETH/LPToken.sol";
 
 contract LPTokenTest is Test {
     LPToken lpToken;
