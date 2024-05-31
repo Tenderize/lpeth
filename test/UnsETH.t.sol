@@ -29,7 +29,7 @@ contract UnsETHTest is Test, ERC721Receiver {
         unsETH = UnsETH(payable(address(new ERC1967Proxy(unsETH_impl, ""))));
         unsETH.initialize();
 
-        myETH = new MockERC20("MyETH", "myETH", 18);
+        myETH = new MockERC20("MyETH", "myETH");
         myETH.mint(address(this), 1000 ether);
         vm.mockCall(registry, abi.encodeWithSignature("adapters(address)", (address(myETH))), abi.encode(adapter));
     }

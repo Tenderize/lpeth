@@ -21,8 +21,8 @@ contract LPETH_Test is Test {
     LpETH lpETH;
 
     function setUp() public {
-        token1 = new MockERC20("Token1", "T1", 18);
-        token2 = new MockERC20("Token 2", "T2", 18);
+        token1 = new MockERC20("Token1", "T1");
+        token2 = new MockERC20("Token 2", "T2");
         registry = new Registry();
         lpToken = new LPToken();
         ConstructorConfig memory config =

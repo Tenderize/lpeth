@@ -2,7 +2,7 @@
 
 // SPDX-License-Identifier: MIT
 
-import { ERC20 } from "solmate/tokens/ERC20.sol";
+import { ERC20 } from "solady/tokens/ERC20.sol";
 
 pragma solidity >=0.8.20;
 
