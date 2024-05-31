@@ -5,5 +5,4 @@ forge-std/=node_modules/forge-std/src
 @openzeppelin/contracts=lib/openzeppelin-contracts/contracts
 @solady/=lib/solady/src/
 @prb/math/=lib/prb-math/src/
-@tenderswap=lib/tenderswap/src
 @solmate=lib/solmate/src
