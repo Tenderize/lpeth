@@ -3,7 +3,7 @@ pragma solidity >=0.8.20;
 import { Test, console } from "forge-std/Test.sol";
 import { VmSafe } from "forge-std/Vm.sol";
 
-import { LPETH, LpETHEvents, ConstructorConfig } from "@/lpETH/LPETH.sol";
+import { LpETH, LpETHEvents, ConstructorConfig } from "@/lpETH/LpETH.sol";
 import { LPToken } from "@/lpETH/LPToken.sol";
 import { Registry } from "@/Registry.sol";
 
@@ -12,7 +12,7 @@ import { UD60x18, UNIT, ud } from "@prb/math/UD60x18.sol";
 import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract LPETH_FeeGauge_Test is Test {
-    LPETH lpETH;
+    LpETH lpETH;
 
     function setUp() public {
         ConstructorConfig memory config = ConstructorConfig({
@@ -21,8 +21,8 @@ contract LPETH_FeeGauge_Test is Test {
             unsETH: address(11),
             treasury: address(10)
         });
-        LPETH lpETH_impl = new LPETH(config);
-        lpETH = LPETH(payable(address(new ERC1967Proxy(address(lpETH_impl), ""))));
+        LpETH lpETH_impl = new LpETH(config);
+        lpETH = LpETH(payable(address(new ERC1967Proxy(address(lpETH_impl), ""))));
         lpETH.initialize();
     }
 

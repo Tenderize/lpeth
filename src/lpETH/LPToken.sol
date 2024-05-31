@@ -12,19 +12,11 @@
 pragma solidity >=0.8.20;
 
 import { ERC20 } from "@solady/tokens/ERC20.sol";
+import { Ownable } from "solady/auth/Ownable.sol";
 
-contract LPToken is ERC20 {
-    address public immutable owner;
-
-    error Unauthorized();
-
-    modifier onlyOwner() {
-        if (msg.sender != owner) revert Unauthorized();
-        _;
-    }
-
+contract LPToken is Ownable, ERC20 {
     constructor() ERC20() {
-        owner = msg.sender;
+        _initializeOwner(msg.sender);
     }
 
     function name() public pure override returns (string memory) {

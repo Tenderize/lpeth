@@ -4,6 +4,7 @@ import { Test, console } from "forge-std/Test.sol";
 import { VmSafe } from "forge-std/Vm.sol";
 
 import { LPToken } from "@/lpETH/LPToken.sol";
+import { Ownable } from "solady/auth/Ownable.sol";
 
 contract LPTokenTest is Test {
     LPToken lpToken;
@@ -31,7 +32,7 @@ contract LPTokenTest is Test {
 
     function test_mint_unauthorized() public {
         vm.startPrank(vm.addr(333));
-        vm.expectRevert(abi.encodeWithSelector(LPToken.Unauthorized.selector));
+        vm.expectRevert(abi.encodeWithSelector(Ownable.Unauthorized.selector));
         lpToken.mint(address(this), 1000);
         vm.stopPrank();
     }
@@ -45,7 +46,7 @@ contract LPTokenTest is Test {
     function test_burn_unauthorized() public {
         lpToken.mint(address(this), 1000);
         vm.startPrank(vm.addr(333));
-        vm.expectRevert(abi.encodeWithSelector(LPToken.Unauthorized.selector));
+        vm.expectRevert(abi.encodeWithSelector(Ownable.Unauthorized.selector));
         lpToken.burn(address(this), 500);
         vm.stopPrank();
     }

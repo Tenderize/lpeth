@@ -121,7 +121,7 @@ abstract contract LpETHStorage {
     }
 }
 
-contract LPETH is
+contract LpETH is
     LpETHStorage,
     LpETHEvents,
     Initializable,

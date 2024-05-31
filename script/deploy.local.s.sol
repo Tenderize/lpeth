@@ -4,7 +4,7 @@ import { Script, console2 } from "forge-std/Script.sol";
 import { Registry } from "@/Registry.sol";
 import { UnsETH } from "@/unsETH/UnsETH.sol";
 import { Renderer } from "@/unsETH/Renderer.sol";
-import { LPETH, ConstructorConfig } from "@/lpETH/LPETH.sol";
+import { LpETH, ConstructorConfig } from "@/lpETH/LpETH.sol";
 import { LPToken } from "@/lpETH/LPToken.sol";
 import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import { ERC20 } from "solady/tokens/ERC20.sol";
@@ -53,8 +53,8 @@ contract DeployLocal is Script {
             treasury: address(0)
         });
 
-        address lpETH_impl = address(new LPETH{ salt: salt }(config));
-        LPETH lpETHProxy = LPETH(payable(address(new ERC1967Proxy{ salt: salt }(lpETH_impl, ""))));
+        address lpETH_impl = address(new LpETH{ salt: salt }(config));
+        LpETH lpETHProxy = LpETH(payable(address(new ERC1967Proxy{ salt: salt }(lpETH_impl, ""))));
         lpETHProxy.initialize();
         console2.log("LPETH Implementation: %s", lpETH_impl);
         console2.log("LPETH Proxy: %s", address(lpETHProxy));
