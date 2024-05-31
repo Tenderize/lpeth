@@ -24,7 +24,7 @@ import { Multicallable } from "solady/utils/Multicallable.sol";
 import { FixedPointMathLib } from "solady/utils/FixedPointMathLib.sol";
 import { SelfPermit } from "@/utils/SelfPermit.sol";
 
-import { UD60x18, ud, UNIT as UNIT_60x18, ZERO as ZERO_60x18 } from "@prb/math/ud60x18.sol";
+import { UD60x18, ud, UNIT as UNIT_60x18, ZERO as ZERO_60x18 } from "@prb/math/UD60x18.sol";
 
 import { OwnableUpgradeable } from "@openzeppelin/upgradeable/access/OwnableUpgradeable.sol";
 import { Initializable } from "@openzeppelin/upgradeable/proxy/utils/Initializable.sol";
