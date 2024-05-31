@@ -56,8 +56,13 @@ library WithdrawQueue {
 
     function finalizeRequests(Data storage $, uint256 amount) external {
         uint256 index = _findFinalizableIndex($, $.head, $.tail, amount);
-        $.head = index + 1;
-        $.partiallyFinalizedAmount = uint128(amount - ($.queue[index].cumulative - $.lifetimeFinalized));
+        if (index > 0) {
+            $.head = index + 1;
+            $.partiallyFinalizedAmount = uint128(amount - ($.queue[index].cumulative - $.lifetimeFinalized));
+        } else {
+            $.partiallyFinalizedAmount += uint128(amount);
+        }
+
         $.lifetimeFinalized += amount;
     }
 

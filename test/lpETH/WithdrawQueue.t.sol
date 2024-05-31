@@ -81,6 +81,11 @@ contract WithdrawQueueTest is Test {
         assertEq(harness.getTail(), 2);
         assertEq(harness.getLifetimeFinalized(), 1500);
         assertEq(harness.getPartiallyFinalizedAmount(), 500);
+        harness.finalizeRequests{ value: 250 }(250);
+        assertEq(harness.getHead(), 2);
+        assertEq(harness.getTail(), 2);
+        assertEq(harness.getLifetimeFinalized(), 1750);
+        assertEq(harness.getPartiallyFinalizedAmount(), 750);
     }
 
     function test_claimRequest() public {
