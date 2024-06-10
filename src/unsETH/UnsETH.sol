@@ -138,8 +138,7 @@ contract UnsETH is Initializable, UUPSUpgradeable, OwnableUpgradeable, ERC721, E
         }
 
         Request memory data = requests[tokenId];
-        // TODO: this gives an error atm
-        // return RENDERER.json(data);
+        return RENDERER.json(data);
     }
 
     ///@dev required by the OZ UUPS module
