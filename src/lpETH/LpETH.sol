@@ -56,8 +56,6 @@ struct SwapParams {
     UD60x18 U;
     UD60x18 s;
     UD60x18 S;
-    uint256 min;
-    uint256 max;
 }
 
 abstract contract LpETHEvents {
@@ -210,38 +208,41 @@ contract LpETH is
     }
 
     function quote(address asset, uint256 amount) external view returns (uint256 out) {
-        SwapParams memory p = _getSwapParams(asset);
+        Adapter adapter = REGISTRY.adapters(asset);
+        if (address(adapter) == address(0)) revert ErrorInvalidAsset(asset);
+        SwapParams memory p = _getSwapParams(asset, adapter);
         out = _quote(asset, amount, p);
     }
 
     function swap(address asset, uint256 amount, uint256 minOut) external returns (uint256 out) {
         Data storage $ = _loadStorageSlot();
-
-        SwapParams memory p = _getSwapParams(asset);
-
-        /**
-         * First unstake the LST so we can get the expected amount of ETH
-         * that will be available for withdrawal later. Since some LST/LRT protocols
-         * might charge small fees for unstaking, we need to account for that.
-         * TODO: if amount > max then we have to split this
-         * TODO: if amount < min we have to batch and not request the unstake at this time and not create the queue item
-         */
-        // (uint256 min, uint256 max) = adapter.minMaxAmount();
+        Adapter adapter = REGISTRY.adapters(asset);
+        if (address(adapter) == address(0)) revert ErrorInvalidAsset(asset);
+        SwapParams memory p = _getSwapParams(asset, adapter);
 
         SafeTransferLib.safeTransferFrom(asset, msg.sender, address(this), amount);
         SafeTransferLib.safeApprove(asset, address(UNSETH), amount);
+
+        // Currently this method will revert if isn't between the MIN and MAX for the
+        // specified 'asset'.
+        // While we could handle this in the runtime in a future upgrade.
+        // For now we'll handle this on the client side with 'multicall' and not being
+        // able to swap less than the MIN.
+
         (uint256 tokenId, uint256 amountExpected) = UNSETH.requestWithdraw(asset, amount);
 
-        (out) = _quote(asset, amount, p);
-        uint256 fee = amount - out;
+        (out) = _quote(asset, amountExpected, p);
+        uint256 fee = amountExpected - out;
 
         // Revert if slippage threshold is exceeded, i.e. if `out` is less than `minOut`
         if (out < minOut) revert ErrorSlippage(out, minOut);
 
         // update pool state
+
         $.unsETHQueue.push(UnsETHQueue.Item({ tokenId: tokenId, fee: fee }));
-        $.unlocking += amount;
-        $.unlockingForAsset[asset] += amount;
+
+        $.unlocking += amountExpected;
+        $.unlockingForAsset[asset] += amountExpected;
         {
             UD60x18 x = ud(amountExpected);
 
@@ -580,15 +581,13 @@ contract LpETH is
         return a < b ? a : b;
     }
 
-    function _getSwapParams(address asset) internal view returns (SwapParams memory p) {
+    function _getSwapParams(address asset, Adapter adapter) internal view returns (SwapParams memory p) {
         Data storage $ = _loadStorageSlot();
-        Adapter adapter = REGISTRY.adapters(asset);
-        (uint256 min, uint256 max) = adapter.minMaxAmount();
-        if (address(adapter) == address(0)) revert ErrorInvalidAsset(asset);
+
         UD60x18 U = ud($.unlocking);
         UD60x18 u = ud($.unlockingForAsset[asset]);
         (UD60x18 s, UD60x18 S) = _checkTotalETHStaked(asset, adapter);
-        p = SwapParams({ U: U, u: u, S: S, s: s, min: min, max: max });
+        p = SwapParams({ U: U, u: u, S: S, s: s });
     }
 
     /**
