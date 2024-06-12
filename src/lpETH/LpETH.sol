@@ -187,7 +187,9 @@ contract LpETH is
 
         uint256 available = ud(amount).mul(UNIT_60x18.sub(ud($.unlocking).div(ud($.liabilities)))).unwrap();
 
-        requestId = $.withdrawQueue.createRequest(uint128(amount - available), payable(msg.sender));
+        if (available < amount) {
+            requestId = $.withdrawQueue.createRequest(uint128(amount - available), payable(msg.sender));
+        }
 
         // Calculate LP tokens to burn
         uint256 lpShares =
