@@ -52,6 +52,7 @@ contract DeployLocal is Script {
         address lpETH_impl = address(new LpETH{ salt: salt }(config));
         LpETH lpETHProxy = LpETH(payable(address(new ERC1967Proxy{ salt: salt }(lpETH_impl, ""))));
         lpETHProxy.initialize();
+        lpToken.transferOwnership(address(lpETHProxy));
         console2.log("LPETH Implementation: %s", lpETH_impl);
         console2.log("LPETH Proxy: %s", address(lpETHProxy));
         console2.log("LP Token: %s", address(lpETHProxy.lpToken()));
