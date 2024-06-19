@@ -8,15 +8,13 @@ import { LpETH } from "@/lpETH/LpETH.sol";
 import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import { ERC20 } from "solady/tokens/ERC20.sol";
 
-contract DeployLocal is Script {
-    bytes32 salt = bytes32(uint256(1));
-
+contract AddLiquidity is Script {
     function run() public {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
-        address swap = 0xB5A53938316E4a02c0d91F1b454E43583429e347;
+        address swap = 0x499333147bE243cc1FdC65E218Bcb92B00c8944F;
 
-        LpETH(payable(swap)).deposit{ value: 5000 ether }(0);
+        LpETH(payable(swap)).deposit{ value: 1000 ether }(0);
         vm.stopBroadcast();
     }
 }
