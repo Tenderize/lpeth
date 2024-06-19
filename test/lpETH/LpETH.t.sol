@@ -186,4 +186,43 @@ contract LPETH_Test is Test, ERC721Receiver {
         // TODO: check events
         // TODO: check amount
     }
+
+    function test_batch_buyUnlock() public {
+        uint256 unsETHRequestId = 1337; // not token id !
+        uint256 swapAmount = 250 ether;
+        vm.deal(payable(address(this)), 2000 ether);
+        lpETH.deposit{ value: 1000 ether }(0);
+
+        vm.mockCall(
+            address(token1_adapter), abi.encodeCall(Adapter.minMaxAmount, ()), abi.encode(0 ether, 100_000 ether)
+        );
+
+        vm.mockCall(address(token1_adapter), abi.encodeCall(Adapter.totalStaked, ()), abi.encode(1000 ether));
+
+        vm.mockCall(
+            address(token1_adapter),
+            abi.encodeCall(Adapter.requestWithdraw, (swapAmount)),
+            abi.encode(unsETHRequestId, swapAmount)
+        );
+
+        token1.mint(address(this), 250 ether);
+        token1.approve(address(lpETH), 200 ether);
+        for (uint256 i = 0; i < 5; i++) {
+            vm.mockCall(
+                address(token1_adapter), abi.encodeCall(Adapter.requestWithdraw, (10 ether)), abi.encode(i, 10 ether)
+            );
+            lpETH.swap(address(token1), 10 ether, 0);
+
+            vm.mockCall(address(token1_adapter), abi.encodeCall(Adapter.isFinalized, (i)), abi.encode(false));
+        }
+
+        // 50 ETH in unlocks pending
+
+        // try to buy 50 ETH with 10 ETH
+        vm.expectRevert(abi.encodeWithSelector(LpETHEvents.ErrorInsufficientAmount.selector));
+        lpETH.batchBuyUnlock{ value: 10 ether }(5);
+
+        // now try with 50 ETH
+        lpETH.batchBuyUnlock{ value: 50 ether }(5);
+    }
 }

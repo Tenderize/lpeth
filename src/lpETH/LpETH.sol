@@ -395,7 +395,7 @@ contract LpETH is
             lpCut = fee60x18.mul(MIN_LP_CUT).unwrap();
             treasuryCut = fee60x18.mul(TREASURY_CUT).unwrap();
             uint256 baseReward = unlock.fee - lpCut - treasuryCut;
-            UD60x18 progress = ud(request.createdAt - block.number).div(ud(UNSETH_EXPIRATION_TIME));
+            UD60x18 progress = ud(request.createdAt - block.timestamp).div(ud(UNSETH_EXPIRATION_TIME));
             reward = ud(baseReward).mul(UNIT_60x18.sub(progress)).unwrap();
             // Adjust lpCut by the remaining amount after subtracting the reward
             // This step seems to adjust lpCut to balance out the distribution
@@ -447,6 +447,7 @@ contract LpETH is
         uint256 totalRewards;
         uint256 totalLpCut;
         uint256 totalTreasuryCut;
+        uint256 msgValue = msg.value;
 
         uint256[] memory tokenIds = new uint256[](n);
 
@@ -464,7 +465,7 @@ contract LpETH is
                 uint256 lpCut = fee60x18.mul(MIN_LP_CUT).unwrap();
                 uint256 treasuryCut = fee60x18.mul(TREASURY_CUT).unwrap();
                 uint256 baseReward = unlock.fee - lpCut - treasuryCut;
-                UD60x18 progress = ud(request.createdAt - block.number).div(ud(UNSETH_EXPIRATION_TIME));
+                UD60x18 progress = ud(request.createdAt - block.timestamp).div(ud(UNSETH_EXPIRATION_TIME));
                 reward = ud(baseReward).mul(UNIT_60x18.sub(progress)).unwrap();
                 // Adjust lpCut by the remaining amount after subtracting the reward
                 // This step seems to adjust lpCut to balance out the distribution
@@ -486,10 +487,14 @@ contract LpETH is
 
             // transfer unlock amount minus reward from caller to pool
             // the reward is the discount paid. 'reward < unlock.fee' always.
-            if (msg.value < request.amount - reward) revert ErrorInsufficientAmount();
-
+            if (msgValue < request.amount - reward) revert ErrorInsufficientAmount();
+            msgValue -= request.amount - reward;
             // transfer unlock to caller
             UNSETH.safeTransferFrom(address(this), msg.sender, unlock.tokenId);
+            // transfer unused ETH back
+            if (msgValue > 0) {
+                payable(msg.sender).transfer(msgValue);
+            }
         }
 
         // Update pool state
