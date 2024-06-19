@@ -17,6 +17,7 @@ library WithdrawQueue {
     error NotFinalized(uint256 id);
     error InsufficientMsgvalue();
     error Unauthorized();
+    error NoClaimableETH();
 
     struct Request {
         uint128 amount; // original request amount
@@ -46,14 +47,15 @@ library WithdrawQueue {
         if (id < $.head) {
             amount = req.amount - req.claimed;
             delete $.queue[id];
-            req.account.transfer(amount);
         } else if (id == $.head) {
-            amount = $.partiallyFinalizedAmount;
+            amount = $.partiallyFinalizedAmount - req.claimed;
             req.claimed = uint128(amount); // TODO: safecast
-            req.account.transfer(amount);
         } else {
             revert NotFinalized(id);
         }
+
+        if (amount == 0) revert NoClaimableETH();
+        req.account.transfer(amount);
     }
 
     function finalizeRequests(Data storage $, uint256 amount) external {

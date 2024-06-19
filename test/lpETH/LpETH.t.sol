@@ -134,6 +134,12 @@ contract LPETH_Test is Test, ERC721Receiver {
         lpETH.claimWithdrawRequest(withdrawReqId);
         assertEq(address(this).balance - balanceBefore, out);
 
+        vm.deal(payable(address(lpETH)), 250 ether);
+        claimable = lpETH.getClaimableForWithdrawRequest(withdrawReqId);
+        assertEq(claimable, 0);
+        vm.expectRevert(abi.encodeWithSelector(WithdrawQueue.NoClaimableETH.selector));
+        claimable = lpETH.claimWithdrawRequest(withdrawReqId);
+
         // TODO: events
     }
 
