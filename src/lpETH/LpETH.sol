@@ -37,6 +37,7 @@ import { UUPSUpgradeable } from "@openzeppelin/upgradeable/proxy/utils/UUPSUpgra
 // ALTERNATIVELY: in the future we could use an oracle that determines the current withdrawal queue length
 // which should account for both partial and full withdrawals, but not for any potential instant liquid funds
 // some protocols might keep on hand. This is why "buyUnlock" should also always check if an unlock has been finalized.
+
 uint256 constant UNSETH_EXPIRATION_TIME = 3 days + 12 hours;
 UD60x18 constant BASE_FEE = UD60x18.wrap(0.0005e18);
 UD60x18 constant K = UD60x18.wrap(4.5e18);
@@ -62,6 +63,7 @@ abstract contract LpETHEvents {
     error ErrorNotFinalized(uint256 tokenId);
     error ErrorIsFinalized(uint256 tokenId);
     error ErrorInvalidAsset(address asset);
+    error UnexpectedTokenId();
     error ErrorSlippage(uint256 out, uint256 minOut);
     error ErrorDepositSharesZero();
     error ErrorRecoveryMode();
@@ -368,7 +370,7 @@ contract LpETH is
         emit BatchUnlockRedeemed(msg.sender, totalReceived, relayerReward, lpReward, tokenIds);
     }
 
-    function buyUnlock() external payable returns (uint256 tokenId) {
+    function buyUnlock(uint256 expectedTokenId) external payable returns (uint256 tokenId) {
         Data storage $ = _loadStorageSlot();
 
         // Can not purchase unlocks in recovery mode
@@ -378,6 +380,7 @@ contract LpETH is
         // get newest item from unlock queue
         UnsETHQueue.Item memory unlock = $.unsETHQueue.popTail().data;
         tokenId = unlock.tokenId;
+        if (tokenId != expectedTokenId) revert UnexpectedTokenId();
         if (UNSETH.isFinalized(tokenId)) revert ErrorIsFinalized(tokenId);
 
         UnsETH.Request memory request = UNSETH.getRequest(tokenId);
@@ -432,11 +435,12 @@ contract LpETH is
 
         // transfer unlock to caller
         UNSETH.safeTransferFrom(address(this), msg.sender, tokenId);
-
+        // Transfer unused ETH back
+        payable(msg.sender).transfer(msg.value - request.amount + reward);
         emit UnlockBought(msg.sender, tokenId, request.amount, reward, lpCut);
     }
 
-    function batchBuyUnlock(uint256 n) external payable {
+    function batchBuyUnlock(uint256 n, uint256 expectedStartId) external payable {
         Data storage $ = _loadStorageSlot();
 
         // Can not purchase unlocks in recovery mode
@@ -454,6 +458,7 @@ contract LpETH is
         for (uint256 i = 0; i < n; i++) {
             // get newest item from unlock queue
             UnsETHQueue.Item memory unlock = $.unsETHQueue.popTail().data;
+            if (i == 0 && unlock.tokenId != expectedStartId) revert UnexpectedTokenId();
             if (UNSETH.isFinalized(unlock.tokenId)) break;
             UnsETH.Request memory request = UNSETH.getRequest(unlock.tokenId);
             if (block.timestamp - request.createdAt > UNSETH_EXPIRATION_TIME) break;

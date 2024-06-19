@@ -220,9 +220,9 @@ contract LPETH_Test is Test, ERC721Receiver {
 
         // try to buy 50 ETH with 10 ETH
         vm.expectRevert(abi.encodeWithSelector(LpETHEvents.ErrorInsufficientAmount.selector));
-        lpETH.batchBuyUnlock{ value: 10 ether }(5);
+        lpETH.batchBuyUnlock{ value: 10 ether }(5, uint256(keccak256(abi.encodePacked(token1, uint256(4)))));
 
         // now try with 50 ETH
-        lpETH.batchBuyUnlock{ value: 50 ether }(5);
+        lpETH.batchBuyUnlock{ value: 50 ether }(5, uint256(keccak256(abi.encodePacked(token1, uint256(4)))));
     }
 }
