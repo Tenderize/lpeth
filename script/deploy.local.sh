@@ -2,7 +2,7 @@
 set -x
 source .env
 
-nohup bash -c "anvil --block-time 2 --fork-url ${MAINNET_RPC} --fork-block-number 19847895 --chain-id 1337 &" >/dev/null 2>&1 && sleep 5
+nohup bash -c "anvil --block-time 2 --fork-url ${MAINNET_RPC} --chain-id 1337 &" >/dev/null 2>&1 && sleep 5
 
 forge build
 
