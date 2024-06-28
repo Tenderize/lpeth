@@ -28,92 +28,161 @@ contract WithdrawQueue_Harness {
         return queue.getClaimableForRequest(id);
     }
 
-    function length() public view returns (uint256) {
-        return queue.length();
+    function getLastId() public view returns (uint256) {
+        return queue.lastId;
     }
 
-    function amountUnfinalized() public view returns (uint256) {
-        return queue.amountUnfinalized();
+    function getTotalFinalized() public view returns (uint256) {
+        return queue.totalFinalized;
     }
 
-    function getHead() public view returns (uint256) {
-        return queue.head;
-    }
-
-    function getTail() public view returns (uint256) {
-        return queue.tail;
-    }
-
-    function getLifetimeFinalized() public view returns (uint256) {
-        return queue.lifetimeFinalized;
-    }
-
-    function getPartiallyFinalizedAmount() public view returns (uint128) {
-        return queue.partiallyFinalizedAmount;
+    function getRequest(uint256 id) public view returns (WithdrawQueue.Request memory) {
+        return queue.queue[id];
     }
 }
 
 contract WithdrawQueueTest is Test {
-    receive() external payable { }
-
     WithdrawQueue_Harness harness;
+    address payable user1;
+    address payable user2;
 
     function setUp() public {
         harness = new WithdrawQueue_Harness();
+        user1 = payable(address(0x1));
+        user2 = payable(address(0x2));
     }
 
-    function test_createRequest() public {
-        uint256 id = harness.createRequest(1000);
-        assertEq(harness.getHead(), 1);
-        assertEq(harness.getTail(), 1);
-        assertEq(id, 1);
-        id = harness.createRequest(1000);
-        assertEq(id, 2);
-        assertEq(harness.getHead(), 1);
-        assertEq(harness.getTail(), 2);
+    function testCreateRequest() public {
+        uint256 amount = 100 ether;
+
+        vm.prank(user1);
+        uint256 id = harness.createRequest(uint128(amount));
+
+        uint256 lastId = harness.getLastId();
+        assertEq(lastId, id, "Last ID should match the created request ID");
+
+        WithdrawQueue.Request memory req = harness.getRequest(id);
+
+        assertEq(req.amount, amount, "Amount should match the requested amount");
+        assertEq(req.account, user1, "Account should match the requester");
+        assertEq(req.cumulative, 0, "Cumulative should be 0 for the first request");
+        assertEq(req.round, 0, "Round should be 0 for the first request");
+    }
+
+    function test_claimRequest_NotFinalized() public {
+        uint256 amount = 100 ether;
+
+        vm.prank(user1);
+        uint256 id = harness.createRequest(uint128(amount));
+
+        vm.prank(user1);
+        vm.expectRevert(abi.encodeWithSelector(WithdrawQueue.NoClaimableETH.selector));
+        harness.claimRequest(id);
+    }
+
+    function test_claimRequest_Unauthorized() public {
+        uint256 amount = 100 ether;
+
+        vm.prank(user1);
+        uint256 id = harness.createRequest(uint128(amount));
+
+        vm.deal(address(harness), amount);
+        harness.finalizeRequests(amount);
+
+        vm.prank(user2);
+        vm.expectRevert(WithdrawQueue.Unauthorized.selector);
+        harness.claimRequest(id);
+    }
+
+    function test_claimRequest_NoClaimableETH() public {
+        uint256 amount = 100 ether;
+
+        vm.prank(user1);
+        uint256 id = harness.createRequest(uint128(amount));
+
+        vm.prank(user1);
+        vm.expectRevert(WithdrawQueue.NoClaimableETH.selector);
+        harness.claimRequest(id);
+    }
+
+    function test_claimRequest_partially_available() public {
+        uint256 amount = 100 ether;
+
+        vm.prank(user1);
+        uint256 id = harness.createRequest(uint128(amount));
+
+        vm.deal(address(harness), 50 ether);
+        harness.finalizeRequests(50 ether);
+
+        uint256 claimable = harness.getClaimableForRequest(id);
+        assertEq(claimable, 50 ether, "Claimable amount should be 50 ether");
+
+        vm.prank(user1);
+        uint256 claimedAmount = harness.claimRequest(id);
+        assertEq(claimedAmount, 50 ether, "Claimed amount should be 50 ether");
+
+        WithdrawQueue.Request memory req = harness.getRequest(id);
+        assertEq(req.cumulative, 50 ether, "Cumulative should be updated to 50 ether");
+        assertEq(req.amount, 50 ether, "Amount should be updated to 50 ether");
+    }
+
+    function test_claimRequest_full() public {
+        uint256 amount = 100 ether;
+
+        vm.prank(user1);
+        uint256 id = harness.createRequest(uint128(amount));
+
+        vm.deal(address(harness), amount);
+        harness.finalizeRequests(amount);
+
+        uint256 claimable = harness.getClaimableForRequest(id);
+        assertEq(claimable, amount, "Claimable amount should be 100 ether");
+
+        vm.prank(user1);
+        uint256 claimedAmount = harness.claimRequest(id);
+        assertEq(claimedAmount, amount, "Claimed amount should be 100 ether");
+
+        WithdrawQueue.Request memory req = harness.getRequest(id);
+        assertEq(req.cumulative, 0, "Cumulative should be reset to 0 after full claim");
     }
 
     function test_finalizeRequests() public {
-        harness.createRequest(1000);
-        harness.createRequest(2000);
-        harness.finalizeRequests{ value: 1500 }(1500);
-        assertEq(harness.getHead(), 2);
-        assertEq(harness.getTail(), 2);
-        assertEq(harness.getLifetimeFinalized(), 1500);
-        assertEq(harness.getPartiallyFinalizedAmount(), 500);
-        harness.finalizeRequests{ value: 250 }(250);
-        assertEq(harness.getHead(), 2);
-        assertEq(harness.getTail(), 2);
-        assertEq(harness.getLifetimeFinalized(), 1750);
-        assertEq(harness.getPartiallyFinalizedAmount(), 750);
-    }
+        uint256 amount1 = 100 ether;
+        uint256 amount2 = 200 ether;
 
-    function test_claimRequest() public {
-        uint256 id = harness.createRequest(1000);
-        harness.finalizeRequests{ value: 1000 }(1000);
-        assertEq(harness.claimRequest(id), 1000);
-        assertEq(harness.getHead(), 1);
-        assertEq(harness.getTail(), 1);
-        assertEq(harness.getLifetimeFinalized(), 1000);
-        assertEq(harness.getClaimableForRequest(id), 0);
-    }
+        vm.prank(user1);
+        harness.createRequest(uint128(amount1));
+        vm.prank(user2);
+        uint256 id2 = harness.createRequest(uint128(amount2));
 
-    function test_getClaimableForRequest() public {
-        uint256 id = harness.createRequest(1000);
-        harness.finalizeRequests{ value: 1000 }(1000);
-        assertEq(harness.getClaimableForRequest(id), 1000);
-    }
+        vm.deal(address(harness), 150 ether);
+        harness.finalizeRequests(150 ether);
 
-    function test_length() public {
-        harness.createRequest(1000);
-        harness.createRequest(2000);
-        assertEq(harness.length(), 2);
-    }
+        uint256 claimable1 = harness.getClaimableForRequest(1);
+        uint256 claimable2 = harness.getClaimableForRequest(id2);
 
-    function test_amountUnfinalized() public {
-        harness.createRequest(1000);
-        harness.createRequest(2000);
-        harness.finalizeRequests(1500);
-        assertEq(harness.amountUnfinalized(), 1500);
+        assertEq(claimable1, 100 ether, "User1 should be able to claim full amount");
+        assertEq(claimable2, 50 ether, "User2 should be able to claim partial amount");
+
+        vm.prank(user1);
+        harness.claimRequest(1);
+
+        vm.prank(user2);
+        harness.claimRequest(id2);
+
+        WithdrawQueue.Request memory req = harness.getRequest(id2);
+        assertEq(req.cumulative, 150 ether, "User2's cumulative should be updated to 150 ether");
+
+        vm.deal(address(harness), 150 ether);
+        harness.finalizeRequests(150 ether);
+
+        claimable2 = harness.getClaimableForRequest(id2);
+        assertEq(claimable2, 150 ether, "User2 should be able to claim remaining 150 ether");
+
+        vm.prank(user2);
+        harness.claimRequest(id2);
+
+        req = harness.getRequest(id2);
+        assertEq(req.cumulative, 0, "User2's cumulative should be reset to 0 after full claim");
     }
 }

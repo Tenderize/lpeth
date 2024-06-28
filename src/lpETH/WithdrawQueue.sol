@@ -11,115 +11,105 @@
 
 pragma solidity >=0.8.20;
 
-// TODO: safeTransferETH
+import { SafeTransferLib } from "@solady/utils/SafeTransferLib.sol";
 
 library WithdrawQueue {
     error NotFinalized(uint256 id);
-    error InsufficientMsgvalue();
     error Unauthorized();
     error NoClaimableETH();
 
     struct Request {
-        uint128 amount; // original request amount
-        uint128 claimed; // amount claimed
-        uint256 cumulative; // cumulative lifetime requested
+        uint256 amount; // original request amount
+        uint256 cumulative; // cumulative requested *before* this request in the current round
+        uint256 round; // round this request was created in
         address payable account;
     }
 
     struct Data {
-        uint256 head;
-        uint256 tail;
-        uint256 lifetimeFinalized;
-        uint128 partiallyFinalizedAmount;
+        uint256 lastId;
+        uint256 currentRound;
+        uint256 totalFinalized;
         mapping(uint256 id => Request) queue;
     }
 
     function createRequest(Data storage $, uint128 amount, address payable account) external returns (uint256 id) {
-        // start head at 1
-        id = ++$.tail;
-        $.queue[id] = Request(amount, 0, $.queue[id - 1].cumulative + amount, account);
-        if ($.head == 0) $.head = 1;
+        // Check if lastId has been finalized
+        Request memory prev = $.queue[$.lastId];
+        id = ++$.lastId; // start head at 1
+
+        // Check if last known ID has been finalized
+        // if `prev.round` <= `$.currentRound` -> true
+        // the current 'queue' is empty and we can start cumulative from 0
+        // as the last call of `finalizeRequest` has also set `totalFinalized` back to 0
+        // otherwise proceed as normal and set cumulative to `prev.cumulative + prev.amount`
+
+        uint256 cumulative = prev.cumulative + prev.amount;
+        if (prev.round < $.currentRound) cumulative = 0;
+
+        $.queue[id] = Request({
+            amount: amount,
+            // checkpoint cumulative requested
+            cumulative: cumulative,
+            account: account,
+            round: $.currentRound
+        });
     }
 
     function claimRequest(Data storage $, uint256 id) external returns (uint256 amount) {
         Request storage req = $.queue[id];
         if (msg.sender != req.account) revert Unauthorized();
-        if (id < $.head) {
-            amount = req.amount - req.claimed;
+
+        if (req.round < $.currentRound || req.cumulative + req.amount <= $.totalFinalized) {
+            // Fully finalized, full amount is claimable
+            // We can remove the entry
+            amount = req.amount;
             delete $.queue[id];
-        } else if (id == $.head) {
-            amount = $.partiallyFinalizedAmount - req.claimed;
-            req.claimed = uint128(amount); // TODO: safecast
         } else {
-            revert NotFinalized(id);
+            // Partially finalized, calculate claimable amount
+            // And update state
+            amount = $.totalFinalized - req.cumulative;
+            req.amount -= amount;
+            req.cumulative += amount;
         }
 
         if (amount == 0) revert NoClaimableETH();
-        req.account.transfer(amount);
+        SafeTransferLib.safeTransferETH(req.account, amount);
     }
 
     function finalizeRequests(Data storage $, uint256 amount) external {
-        uint256 index = _findFinalizableIndex($, $.head, $.tail, amount);
-        if (index > 0) {
-            $.head = index + 1;
-            $.partiallyFinalizedAmount = uint128(amount - ($.queue[index].cumulative - $.lifetimeFinalized));
-        } else {
-            $.partiallyFinalizedAmount += uint128(amount);
-        }
+        uint256 lastId = $.lastId;
+        if (lastId == 0) return;
 
-        $.lifetimeFinalized += amount;
+        Request memory req = $.queue[lastId];
+
+        uint256 max = req.cumulative + req.amount - $.totalFinalized;
+        // If `amount > max` we can finalize all pending requests.
+        // In this case we can increment `currentRound` and reset `totalFinalized` to 0.
+        // The next request created will start its `cumulative` from 0.
+        if (amount >= max) {
+            amount = max;
+            $.currentRound++;
+            $.totalFinalized = 0;
+        } else {
+            $.totalFinalized += amount;
+        }
     }
 
-    function getClaimableForRequest(Data storage $, uint256 id) external view returns (uint256) {
-        if (id < $.head) {
-            Request memory req = $.queue[id];
-            return req.amount - req.claimed;
-        } else if (id == $.head) {
-            Request memory req = $.queue[id];
-            return $.partiallyFinalizedAmount - req.claimed;
+    function getClaimableForRequest(Data storage $, uint256 id) external view returns (uint256 amount) {
+        Request storage req = $.queue[id];
+
+        if (req.round < $.currentRound || req.cumulative + req.amount <= $.totalFinalized) {
+            // Fully finalized, full amount is claimable
+            // We can remove the entry
+            amount = req.amount;
         } else {
-            return 0;
+            // Partially finalized, calculate claimable amount
+            // And update state
+            amount = $.totalFinalized - req.cumulative;
         }
     }
 
     function getRequest(Data storage $, uint256 id) external view returns (Request memory) {
         return $.queue[id];
-    }
-
-    function length(Data storage $) external view returns (uint256) {
-        return $.tail - $.head + 1;
-    }
-
-    function amountUnfinalized(Data storage $) external view returns (uint256) {
-        return $.queue[$.tail].cumulative - $.lifetimeFinalized;
-    }
-
-    function _findFinalizableIndex(
-        Data storage $,
-        uint256 start,
-        uint256 end,
-        uint256 amount
-    )
-        internal
-        view
-        returns (uint256)
-    {
-        uint256 _ltf = $.lifetimeFinalized;
-        uint256 originalStart = start;
-
-        while (start < end) {
-            uint256 mid = (start + end) / 2;
-            uint256 midCumulative = $.queue[mid].cumulative;
-
-            if (midCumulative - _ltf == amount) {
-                return mid;
-            } else if (midCumulative - _ltf <= amount) {
-                start = mid + 1;
-            } else {
-                end = mid;
-            }
-        }
-
-        return start != originalStart ? start - 1 : 0;
     }
 }
