@@ -496,10 +496,6 @@ contract LpETH is
             msgValue -= request.amount - reward;
             // transfer unlock to caller
             UNSETH.safeTransferFrom(address(this), msg.sender, unlock.tokenId);
-            // transfer unused ETH back
-            if (msgValue > 0) {
-                payable(msg.sender).transfer(msgValue);
-            }
         }
 
         // Update pool state
@@ -514,6 +510,11 @@ contract LpETH is
         {
             uint256 amountToFinalize = totalAmountExpected - totalRewards - totalLpCut - totalTreasuryCut;
             $.withdrawQueue.finalizeRequests(amountToFinalize);
+        }
+
+        // transfer unused ETH back
+        if (msgValue > 0) {
+            payable(msg.sender).transfer(msgValue);
         }
 
         emit BatchUnlockBought(msg.sender, totalAmountExpected, totalRewards, totalLpCut, tokenIds);
