@@ -55,6 +55,7 @@ contract UnsETH is Initializable, UUPSUpgradeable, OwnableUpgradeable, ERC721, E
 
     function initialize() external initializer {
         __Ownable_init(msg.sender);
+        __UUPSUpgradeable_init();
     }
 
     fallback() external payable { }
