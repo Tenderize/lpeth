@@ -278,32 +278,13 @@ contract LpETH is
         {
             // - Update unlocking
             uint256 unlocked = _min(request.amount, amountReceived);
+            _updateAssetState(unlocked, request.derivative);
             $.unlocking -= unlocked;
-            uint256 ufa = $.unlockingForAsset[request.derivative] - unlocked;
-            // - Update S if unlockingForAsset is now zero
-            if (ufa == 0) {
-                $.S = $.S.sub($.lastSupplyForAsset[request.derivative]);
-                $.lastSupplyForAsset[request.derivative] = ZERO_60x18;
-            }
-            // - Update unlockingForAsset
-            $.unlockingForAsset[request.derivative] = ufa;
         }
 
         // account for rewards and fees
-        //calculate the relayer reward
-        uint256 relayerReward;
-        uint256 lpReward;
-        {
-            relayerReward = ud(fee).mul(RELAYER_CUT).unwrap();
-            // update relayer rewards
-            $.relayerRewards[msg.sender] += relayerReward;
-
-            // - Update liabilities to distribute LP rewards
-            uint256 treasuryCut = ud(fee).mul(TREASURY_CUT).unwrap();
-            $.treasuryRewards += treasuryCut;
-            lpReward = fee - treasuryCut - relayerReward;
-            $.liabilities += lpReward;
-        }
+        //calculate the relayer and lp reward
+        (uint256 relayerReward, uint256 lpReward,) = _redeemUpdatePoolWithRewards(fee);
 
         // Finalize requests
         {
@@ -331,15 +312,8 @@ contract LpETH is
             totalExpected += request.amount;
             totalReceived += amountReceived;
 
-            uint256 ufa = $.unlockingForAsset[request.derivative] - _min(amountReceived, request.amount);
-            // - Update S if unlockingForAsset is now zero
-            if (ufa == 0) {
-                $.S = $.S.sub($.lastSupplyForAsset[request.derivative]);
-                $.lastSupplyForAsset[request.derivative] = ZERO_60x18;
-            }
-            // - Update unlockingForAsset
-            $.unlockingForAsset[request.derivative] = ufa;
             tokenIds[i] = unlock.tokenId;
+            _updateAssetState(_min(amountReceived, request.amount), request.derivative);
         }
 
         uint256 totalFeeAfterRecovery = _doRecovery(totalReceived, totalExpected, totalFee);
@@ -347,20 +321,8 @@ contract LpETH is
         // - Update unlocking
         $.unlocking -= _min(totalExpected, totalReceived);
 
-        //calculate the relayer reward
-        uint256 relayerReward;
-        uint256 lpReward;
-        {
-            relayerReward = ud(totalFeeAfterRecovery).mul(RELAYER_CUT).unwrap();
-            // update relayer rewards
-            $.relayerRewards[msg.sender] += relayerReward;
-
-            // - Update liabilities to distribute LP rewards
-            uint256 treasuryCut = ud(totalFeeAfterRecovery).mul(TREASURY_CUT).unwrap();
-            $.treasuryRewards += treasuryCut;
-            lpReward = totalFeeAfterRecovery - treasuryCut - relayerReward;
-            $.liabilities += lpReward;
-        }
+        //calculate the relayer and lp rewards
+        (uint256 relayerReward, uint256 lpReward,) = _redeemUpdatePoolWithRewards(totalFeeAfterRecovery);
 
         // Finalize requests
         {
@@ -369,6 +331,35 @@ contract LpETH is
         }
 
         emit BatchUnlockRedeemed(msg.sender, totalReceived, relayerReward, lpReward, tokenIds);
+    }
+
+    function _updateAssetState(uint256 unlocked, address asset) internal {
+        Data storage $ = _loadStorageSlot();
+        uint256 ufa = $.unlockingForAsset[asset] - unlocked;
+        // - Update S if unlockingForAsset is now zero
+        if (ufa == 0) {
+            $.S = $.S.sub($.lastSupplyForAsset[asset]);
+            $.lastSupplyForAsset[asset] = ZERO_60x18;
+        }
+        // - Update unlockingForAsset
+        $.unlockingForAsset[asset] = ufa;
+    }
+
+    function _redeemUpdatePoolWithRewards(uint256 fee)
+        internal
+        returns (uint256 relayerReward, uint256 lpReward, uint256 treasuryCut)
+    {
+        Data storage $ = _loadStorageSlot();
+
+        relayerReward = ud(fee).mul(RELAYER_CUT).unwrap();
+        // update relayer rewards
+        $.relayerRewards[msg.sender] += relayerReward;
+
+        // - Update liabilities to distribute LP rewards
+        treasuryCut = ud(fee).mul(TREASURY_CUT).unwrap();
+        lpReward = fee - treasuryCut - relayerReward;
+        $.treasuryRewards += treasuryCut;
+        $.liabilities += lpReward;
     }
 
     function buyUnlock(uint256 expectedTokenId) external payable returns (uint256 tokenId) {
@@ -394,38 +385,16 @@ contract LpETH is
         // to the
         // treasury
         // The base reward then further decays as time to maturity decreases
-        uint256 reward;
-        uint256 lpCut;
-        uint256 treasuryCut;
-        {
-            UD60x18 fee60x18 = ud(unlock.fee);
-            lpCut = fee60x18.mul(MIN_LP_CUT).unwrap();
-            treasuryCut = fee60x18.mul(TREASURY_CUT).unwrap();
-            uint256 baseReward = unlock.fee - lpCut - treasuryCut;
-            UD60x18 progress = ud(request.createdAt - block.timestamp).div(ud(UNSETH_EXPIRATION_TIME));
-            reward = ud(baseReward).mul(UNIT_60x18.sub(progress)).unwrap();
-            // Adjust lpCut by the remaining amount after subtracting the reward
-            // This step seems to adjust lpCut to balance out the distribution
-            // Assuming the final lpCut should encompass any unallocated fee portions
-            lpCut += baseReward - reward;
-        }
-
-        // Update pool state
-        // - update unlocking
-        $.unlocking -= request.amount;
+        (uint256 reward, uint256 lpCut, uint256 treasuryCut) = _buyUpdatePoolWithRewards(unlock.fee, request.createdAt);
         // - Update liabilities to distribute LP rewards
         $.liabilities += lpCut;
         // - Update treasury rewards
         $.treasuryRewards += treasuryCut;
+        // Update pool state
+        // - update unlocking
+        $.unlocking -= request.amount;
 
-        uint256 ufa = $.unlockingForAsset[request.derivative] - request.amount;
-        // - Update S if unlockingForAsset is now zero
-        if (ufa == 0) {
-            $.S = $.S.sub($.lastSupplyForAsset[request.derivative]);
-            $.lastSupplyForAsset[request.derivative] = ZERO_60x18;
-        }
-        // - Update unlockingForAsset
-        $.unlockingForAsset[request.derivative] = ufa;
+        _updateAssetState(request.amount, request.derivative);
 
         // Finalize requests
         {
@@ -470,31 +439,14 @@ contract LpETH is
             }
             totalAmountExpected += request.amount;
             tokenIds[i] = unlock.tokenId;
-            uint256 reward;
-            {
-                UD60x18 fee60x18 = ud(unlock.fee);
-                uint256 lpCut = fee60x18.mul(MIN_LP_CUT).unwrap();
-                uint256 treasuryCut = fee60x18.mul(TREASURY_CUT).unwrap();
-                uint256 baseReward = unlock.fee - lpCut - treasuryCut;
-                UD60x18 progress = ud(request.createdAt - block.timestamp).div(ud(UNSETH_EXPIRATION_TIME));
-                reward = ud(baseReward).mul(UNIT_60x18.sub(progress)).unwrap();
-                // Adjust lpCut by the remaining amount after subtracting the reward
-                // This step seems to adjust lpCut to balance out the distribution
-                // Assuming the final lpCut should encompass any unallocated fee portions
-                lpCut += baseReward - reward;
-                totalRewards += reward;
-                totalLpCut += lpCut;
-                totalTreasuryCut += treasuryCut;
-            }
+            (uint256 reward, uint256 lpCut, uint256 treasuryCut) =
+                _buyUpdatePoolWithRewards(unlock.fee, request.createdAt);
 
-            uint256 ufa = $.unlockingForAsset[request.derivative] - request.amount;
-            // - Update S if unlockingForAsset is now zero
-            if (ufa == 0) {
-                $.S = $.S.sub($.lastSupplyForAsset[request.derivative]);
-                $.lastSupplyForAsset[request.derivative] = ZERO_60x18;
-            }
-            // - Update unlockingForAsset
-            $.unlockingForAsset[request.derivative] = ufa;
+            totalRewards += reward;
+            totalLpCut += lpCut;
+            totalTreasuryCut += treasuryCut;
+
+            _updateAssetState(request.amount, request.derivative);
 
             // transfer unlock amount minus reward from caller to pool
             // the reward is the discount paid. 'reward < unlock.fee' always.
@@ -524,6 +476,26 @@ contract LpETH is
         }
 
         emit BatchUnlockBought(msg.sender, totalAmountExpected, totalRewards, totalLpCut, tokenIds);
+    }
+
+    function _buyUpdatePoolWithRewards(
+        uint256 fee,
+        uint256 requestCreatedAt
+    )
+        internal
+        view
+        returns (uint256 reward, uint256 lpCut, uint256 treasuryCut)
+    {
+        UD60x18 fee60x18 = ud(fee);
+        lpCut = fee60x18.mul(MIN_LP_CUT).unwrap();
+        treasuryCut = fee60x18.mul(TREASURY_CUT).unwrap();
+        uint256 baseReward = fee - lpCut - treasuryCut;
+        UD60x18 progress = ud(requestCreatedAt - block.timestamp).div(ud(UNSETH_EXPIRATION_TIME));
+        reward = ud(baseReward).mul(UNIT_60x18.sub(progress)).unwrap();
+        // Adjust lpCut by the remaining amount after subtracting the reward
+        // This step seems to adjust lpCut to balance out the distribution
+        // Assuming the final lpCut should encompass any unallocated fee portions
+        lpCut += baseReward - reward;
     }
 
     /**
