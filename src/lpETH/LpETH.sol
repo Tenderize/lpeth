@@ -380,10 +380,13 @@ contract LpETH is
         // get newest item from unlock queue
         UnsETHQueue.Item memory unlock = $.unsETHQueue.popTail().data;
         tokenId = unlock.tokenId;
-        if (tokenId != expectedTokenId) revert UnexpectedTokenId();
-        if (UNSETH.isFinalized(tokenId)) revert ErrorIsFinalized(tokenId);
 
         UnsETH.Request memory request = UNSETH.getRequest(tokenId);
+
+        if (tokenId != expectedTokenId) revert UnexpectedTokenId();
+        if (UNSETH.isFinalized(tokenId) || request.createdAt + UNSETH_EXPIRATION_TIME < block.timestamp) {
+            revert ErrorIsFinalized(tokenId);
+        }
 
         // Calculate the reward for purchasing the unlock
         // The base reward is the fee minus the MIN_LP_CUT going to liquidity providers and minus the TREASURY_CUT going
@@ -458,10 +461,12 @@ contract LpETH is
         for (uint256 i = 0; i < n; i++) {
             // get newest item from unlock queue
             UnsETHQueue.Item memory unlock = $.unsETHQueue.popTail().data;
-            if (i == 0 && unlock.tokenId != expectedStartId) revert UnexpectedTokenId();
-            if (UNSETH.isFinalized(unlock.tokenId)) break;
             UnsETH.Request memory request = UNSETH.getRequest(unlock.tokenId);
-            if (block.timestamp - request.createdAt > UNSETH_EXPIRATION_TIME) break;
+
+            if (i == 0 && unlock.tokenId != expectedStartId) revert UnexpectedTokenId();
+            if (UNSETH.isFinalized(unlock.tokenId) || request.createdAt + UNSETH_EXPIRATION_TIME < block.timestamp) {
+                break;
+            }
             totalAmountExpected += request.amount;
             tokenIds[i] = unlock.tokenId;
             uint256 reward;
