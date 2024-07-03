@@ -196,6 +196,7 @@ contract LpETH is
         // Calculate LP tokens to burn
         uint256 lpShares =
             $.liabilities > 0 ? FixedPointMathLib.fullMulDivUp(amount, LPTOKEN.totalSupply(), $.liabilities) : amount;
+        if (lpShares == 0) revert ErrorDepositSharesZero();
 
         if (lpShares > maxLpSharesBurnt) revert ErrorSlippage(lpShares, maxLpSharesBurnt);
 
