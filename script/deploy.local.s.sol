@@ -8,6 +8,7 @@ import { LpETH, ConstructorConfig } from "@/lpETH/LpETH.sol";
 import { LPToken } from "@/lpETH/LPToken.sol";
 import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import { ERC20 } from "solady/tokens/ERC20.sol";
+import { SwapRouter } from "@/periphery/SwapRouter.sol";
 
 // Adapters
 import { Adapter } from "@/adapters/Adapter.sol";
@@ -73,6 +74,9 @@ contract DeployLocal is Script {
         Adapter stETHAdapter = new StETHAdapter();
         registryProxy.setAdapter(STETH_TOKEN, stETHAdapter);
         console2.log("StETH Adapter: %s", address(stETHAdapter));
+
+        SwapRouter swapRouter = new SwapRouter();
+        console2.log("SwapRouter: %s", address(swapRouter));
 
         vm.stopBroadcast();
     }
