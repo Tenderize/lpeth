@@ -171,9 +171,9 @@ contract LpETH is
     function deposit(uint256 minLpShares) external payable returns (uint256 lpShares) {
         Data storage $ = _loadStorageSlot();
 
-        lpShares = $.liabilities > 0
-            ? FixedPointMathLib.fullMulDiv(msg.value, LPTOKEN.totalSupply(), $.liabilities)
-            : msg.value;
+        uint256 supply = LPTOKEN.totalSupply();
+        lpShares =
+            $.liabilities > 0 && supply > 0 ? FixedPointMathLib.fullMulDiv(msg.value, supply, $.liabilities) : msg.value;
 
         if (lpShares < minLpShares) revert ErrorSlippage(lpShares, minLpShares);
         if (lpShares == 0) revert ErrorDepositSharesZero();
