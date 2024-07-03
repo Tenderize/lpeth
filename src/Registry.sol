@@ -9,7 +9,7 @@
 //
 // Copyright (c) Tenderize Labs Ltd
 
-pragma solidity >=0.8.20;
+pragma solidity >=0.8.25;
 
 import { OwnableUpgradeable } from "@openzeppelin/upgradeable/access/OwnableUpgradeable.sol";
 import { Initializable } from "@openzeppelin/upgradeable/proxy/utils/Initializable.sol";

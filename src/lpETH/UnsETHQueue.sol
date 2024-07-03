@@ -9,7 +9,7 @@
 //
 // Copyright (c) Tenderize Labs Ltd
 
-pragma solidity >=0.8.20;
+pragma solidity >=0.8.25;
 
 /**
  * @notice This file implements the necessary functionality for a double-ended queue or deque.

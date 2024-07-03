@@ -23,7 +23,7 @@ import { Registry } from "@/Registry.sol";
 import { ERC721Receiver } from "@/utils/ERC721Receiver.sol";
 import { Adapter, AdapterDelegateCall } from "@/adapters/Adapter.sol";
 
-pragma solidity >=0.8.20;
+pragma solidity >=0.8.25;
 
 // solhint-disable quotes
 

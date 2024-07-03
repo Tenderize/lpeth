@@ -4,7 +4,7 @@
 
 import { ERC20 } from "solady/tokens/ERC20.sol";
 
-pragma solidity >=0.8.20;
+pragma solidity >=0.8.25;
 
 /// @title Self Permit
 /// @notice Functionality to call permit on any EIP-2612-compliant token for use in the route

@@ -1,4 +1,4 @@
-pragma solidity >=0.8.20;
+pragma solidity >=0.8.25;
 
 import { Adapter } from "@/adapters/Adapter.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";

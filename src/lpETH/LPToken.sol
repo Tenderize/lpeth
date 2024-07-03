@@ -9,7 +9,7 @@
 //
 // Copyright (c) Tenderize Labs Ltd
 
-pragma solidity >=0.8.20;
+pragma solidity >=0.8.25;
 
 import { ERC20 } from "@solady/tokens/ERC20.sol";
 import { Ownable } from "solady/auth/Ownable.sol";

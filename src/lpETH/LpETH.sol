@@ -9,7 +9,7 @@
 //
 // Copyright (c) Tenderize Labs Ltd
 
-pragma solidity >=0.8.20;
+pragma solidity >=0.8.25;
 
 import { Registry } from "@/Registry.sol";
 import { LPToken } from "@/lpETH/LPToken.sol";
@@ -69,6 +69,7 @@ abstract contract LpETHEvents {
     error ErrorRecoveryMode();
     error GaugeZero();
     error ErrorInsufficientAmount();
+    error DepositedInCurrentTx();
 
     event Deposit(address indexed from, uint256 amount, uint256 lpSharesMinted);
     event Withdraw(address indexed to, uint256 amount, uint256 lpSharesBurnt, uint256 requestId);
@@ -135,6 +136,9 @@ contract LpETH is
     using UnsETHQueue for UnsETHQueue.Data;
     using WithdrawQueue for WithdrawQueue.Data;
 
+    // uint256(keccak256("DEPOSITED_IN_CURRENT_TX"))
+    uint256 private constant NONREENTRANT_TSTORE = 0x20;
+    uint256 private constant DEPOSITED_IN_CURRENT_TX_TSTORE = 0x40; // tstore slot
     LPToken private immutable LPTOKEN = LPToken(address(0));
     Registry private immutable REGISTRY = Registry(address(0));
     UnsETH private immutable UNSETH = UnsETH(payable(0xA2FE2b9298c03AF9C5d885e62Bc04F77a7Ff91BF));
@@ -146,6 +150,19 @@ contract LpETH is
     }
 
     receive() external payable { }
+
+    modifier nonreentrant() {
+        assembly {
+            if tload(NONREENTRANT_TSTORE) { revert(0, 0) }
+            tstore(NONREENTRANT_TSTORE, 1)
+        }
+        _;
+        // Unlocks the guard, making the pattern composable.
+        // After the function exits, it can be called again, even in the same transaction.
+        assembly {
+            tstore(NONREENTRANT_TSTORE, 0)
+        }
+    }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(ConstructorConfig memory config) {
@@ -178,13 +195,28 @@ contract LpETH is
         if (lpShares < minLpShares) revert ErrorSlippage(lpShares, minLpShares);
         if (lpShares == 0) revert ErrorDepositSharesZero();
 
-        LPTOKEN.mint(msg.sender, lpShares);
         $.liabilities += msg.value;
+        LPTOKEN.mint(msg.sender, lpShares);
+
+        assembly {
+            tstore(DEPOSITED_IN_CURRENT_TX_TSTORE, 1)
+        }
 
         emit Deposit(msg.sender, msg.value, lpShares);
     }
 
-    function withdraw(uint256 amount, uint256 maxLpSharesBurnt) external returns (uint256 requestId) {
+    function withdraw(uint256 amount, uint256 maxLpSharesBurnt) external nonreentrant returns (uint256 requestId) {
+        bytes4 selector = LpETHEvents.DepositedInCurrentTx.selector;
+        assembly {
+            // Get the free memory pointer
+            let freeMemPtr := mload(0x40)
+            if eq(tload(DEPOSITED_IN_CURRENT_TX_TSTORE), 1) {
+                // Store the selector at the free memory pointer
+                mstore(freeMemPtr, selector)
+                // Revert with the selector stored in memory
+                revert(freeMemPtr, 0x04)
+            }
+        }
         Data storage $ = _loadStorageSlot();
 
         uint256 available = ud(amount).mul(UNIT_60x18.sub(ud($.unlocking).div(ud($.liabilities)))).unwrap();
@@ -219,7 +251,7 @@ contract LpETH is
         out = _quote(asset, amount, p);
     }
 
-    function swap(address asset, uint256 amount, uint256 minOut) external returns (uint256 out) {
+    function swap(address asset, uint256 amount, uint256 minOut) external nonreentrant returns (uint256 out) {
         Data storage $ = _loadStorageSlot();
         Adapter adapter = REGISTRY.adapters(asset);
         if (address(adapter) == address(0)) revert ErrorInvalidAsset(asset);
@@ -261,7 +293,7 @@ contract LpETH is
         emit Swap(msg.sender, asset, amount, fee, tokenId);
     }
 
-    function redeemUnlock() external {
+    function redeemUnlock() external nonreentrant {
         Data storage $ = _loadStorageSlot();
 
         // get oldest item from unlock queue
@@ -295,7 +327,7 @@ contract LpETH is
         emit UnlockRedeemed(msg.sender, unlock.tokenId, amountReceived, relayerReward, lpReward);
     }
 
-    function batchRedeemUnlocks(uint256 n) external {
+    function batchRedeemUnlocks(uint256 n) external nonreentrant {
         Data storage $ = _loadStorageSlot();
         uint256 totalReceived;
         uint256 totalExpected;
@@ -362,7 +394,7 @@ contract LpETH is
         $.liabilities += lpReward;
     }
 
-    function buyUnlock(uint256 expectedTokenId) external payable returns (uint256 tokenId) {
+    function buyUnlock(uint256 expectedTokenId) external payable nonreentrant returns (uint256 tokenId) {
         Data storage $ = _loadStorageSlot();
 
         // Can not purchase unlocks in recovery mode
@@ -413,7 +445,7 @@ contract LpETH is
         emit UnlockBought(msg.sender, tokenId, request.amount, reward, lpCut);
     }
 
-    function batchBuyUnlock(uint256 n, uint256 expectedStartId) external payable {
+    function batchBuyUnlock(uint256 n, uint256 expectedStartId) external payable nonreentrant {
         Data storage $ = _loadStorageSlot();
 
         // Can not purchase unlocks in recovery mode

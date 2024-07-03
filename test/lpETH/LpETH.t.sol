@@ -1,4 +1,4 @@
-pragma solidity >=0.8.20;
+pragma solidity >=0.8.25;
 
 import { Test, console } from "forge-std/Test.sol";
 import { VmSafe } from "forge-std/Vm.sol";
@@ -17,6 +17,10 @@ import { ERC721Receiver } from "@/utils/ERC721Receiver.sol";
 
 // This is an integration test.
 // Only `Adapter` calls are mocked.
+
+// NOTE: Since this contract uses transient storage, use the "--isolate" flag to run the tests.
+// This will execute top level calls as a context independent transaction.
+// see: https://github.com/foundry-rs/foundry/issues/6908#issuecomment-2205157619
 
 contract LpETH_Harness is LpETH {
     constructor(ConstructorConfig memory config) LpETH(config) { }

@@ -1,4 +1,4 @@
-pragma solidity >=0.8.20;
+pragma solidity >=0.8.25;
 
 library AdapterDelegateCall {
     error AdapterDelegateCallFailed(string msg);
@@ -8,12 +8,15 @@ library AdapterDelegateCall {
         (bool success, bytes memory returnData) = address(adapter).delegatecall(data);
 
         if (!success) {
-            // Next 5 lines from https://ethereum.stackexchange.com/a/83577
-            if (returnData.length < 68) revert AdapterDelegateCallFailed("");
-            assembly {
-                returnData := add(returnData, 0x04)
+            if (returnData.length < 4) {
+                revert AdapterDelegateCallFailed("Unknown error occurred");
             }
-            revert AdapterDelegateCallFailed(abi.decode(returnData, (string)));
+
+            // Bubble up the full return data
+            assembly {
+                let returndata_size := mload(returnData)
+                revert(add(returnData, 0x20), returndata_size)
+            }
         }
 
         return returnData;
