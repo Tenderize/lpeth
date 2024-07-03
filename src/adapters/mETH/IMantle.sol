@@ -1,7 +1,8 @@
+pragma solidity >=0.8.25;
+
 // 0xe3cBd06D7dadB3F4e6557bAb7EdD924CD1489E8f
 
 interface IStaking {
-    // TODO: 0,01 ETH min
     function unstakeRequest(uint128 methAmount, uint128 minETHAmount) external returns (uint256 id);
     function claimUnstakeRequest(uint256 unstakeRequestID) external;
     function unstakeRequestInfo(uint256 unstakeRequestID)

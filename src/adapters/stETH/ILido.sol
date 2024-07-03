@@ -1,3 +1,5 @@
+pragma solidity >=0.8.25;
+
 struct WithdrawalRequestStatus {
     /// @notice stETH token amount that was locked on withdrawal queue for this request
     uint256 amountOfStETH;
@@ -14,7 +16,6 @@ struct WithdrawalRequestStatus {
 }
 
 interface IWithdrawalQueue {
-    // TODO: this has a minimum !!
     function requestWithdrawals(
         uint256[] calldata _amounts,
         address _owner
@@ -22,7 +23,6 @@ interface IWithdrawalQueue {
         external
         returns (uint256[] memory requestIds);
 
-    // TODO: find a solution to optimize with hints
     function claimWithdrawal(uint256 _requestId) external;
 
     function getWithdrawalStatus(uint256[] calldata _requestIds)

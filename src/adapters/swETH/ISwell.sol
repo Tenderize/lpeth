@@ -1,4 +1,4 @@
-// TODO: there is a min and maximum amount for the withdrawal
+pragma solidity >=0.8.25;
 
 struct WithdrawRequest {
     uint256 amount;

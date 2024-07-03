@@ -1,3 +1,5 @@
+pragma solidity >=0.8.25;
+
 interface ILiquidityPool {
     function requestWithdraw(address recipient, uint256 amount) external returns (uint256 requestId);
     function amountForShare(uint256 share) external view returns (uint256);

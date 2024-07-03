@@ -1,3 +1,5 @@
+pragma solidity >=0.8.25;
+
 /// @notice structure representing a user request for withdrawal.
 struct UserWithdrawInfo {
     address payable owner; // address that can claim eth on behalf of this request
