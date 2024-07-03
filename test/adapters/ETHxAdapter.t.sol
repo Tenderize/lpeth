@@ -34,4 +34,9 @@ contract ETHxAdapterTest is Test, ERC721Receiver {
         console.log("totalStaked %s", adapter.totalStaked());
         assertFalse(adapter.isFinalized(tokenId));
     }
+
+    function test_unstakeLowerThanMinumum() external {
+        vm.expectRevert();
+        bytes memory data = adapter._delegatecall(abi.encodeWithSelector(adapter.requestWithdraw.selector, 100));
+    }
 }
