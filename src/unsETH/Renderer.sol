@@ -30,6 +30,7 @@ import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 
 contract Renderer {
     using Strings for uint256;
+    using Strings for address;
 
     /**
      * @notice Returns the JSON metadata for a given unlock
@@ -62,7 +63,7 @@ contract Renderer {
                         "000000",
                         "'/>",
                         "<text x='10' y='20'>",
-                        data.derivative,
+                        data.derivative.toHexString(),
                         '</text><text x="10" y="40">',
                         data.amount.toString(),
                         '</text><text x="10" y="60">',
@@ -87,11 +88,11 @@ contract Renderer {
                 data.amount.toString(),
                 "},",
                 '{"trait_type": "derivative", "value":"',
-                data.derivative,
+                data.derivative.toHexString(),
                 '"},',
                 '{"trait_type": "requestId", "value":"',
-                data.requestId,
-                '"},'
+                data.requestId.toString(),
+                '"}'
             )
         );
     }
