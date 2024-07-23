@@ -208,7 +208,11 @@ contract PreLaunch is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         uint256 epochsElapsedSinceClaimable = (block.timestamp - claimableTimestamp) / EPOCH_LENGTH;
         uint256 lpEthAmount = lockup.amount * lpEthReceived / totalDeposits;
         SafeTransferLib.safeApprove(lpEth, votingEscrow, lpEthAmount);
-        VotingEscrow(votingEscrow).lockFor(msg.sender, lpEthAmount, lockup.duration - epochsElapsedSinceClaimable);
+        if (lockup.duration > epochsElapsedSinceClaimable) {
+            VotingEscrow(votingEscrow).lockFor(msg.sender, lpEthAmount, lockup.duration - epochsElapsedSinceClaimable);
+        } else {
+            ERC20(LpETH(lpEth).lpToken()).transfer(msg.sender, lpEthAmount);
+        }
         delete lockups[msg.sender];
     }
 
