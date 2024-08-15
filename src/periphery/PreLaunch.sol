@@ -82,7 +82,7 @@ contract PreLaunch is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function isClaimable() public view returns (bool) {
-        return votingEscrow != address(0);
+        return votingEscrow != address(0) && lpEthReceived > 0;
     }
 
     function setLpEth(address payable _lpEth) external onlyOwner {
