@@ -105,6 +105,10 @@ contract PreLaunch is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             revert();
         }
 
+        if (isActive()) {
+            revert();
+        }
+
         uint256 lpShares = LpETH(lpEth).deposit{ value: address(this).balance }(minLpShares);
         lpEthReceived += lpShares;
     }
