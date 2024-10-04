@@ -10,8 +10,10 @@ curl -H "Content-Type: application/json" -X POST --data '{"jsonrpc":"2.0","id":6
 
 export PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 
-forge script script/deploy.local.s.sol --legacy --rpc-url http://127.0.0.1:8545 --broadcast --private-key $PRIVATE_KEY -vvvv
-forge script script/add_liq.s.sol --legacy --rpc-url http://127.0.0.1:8545 --broadcast --private-key $PRIVATE_KEY -vvvv
+ forge script script/deploy.local.s.sol --legacy --rpc-url http://127.0.0.1:8545 --broadcast --private-key $PRIVATE_KEY -vvvv
+ forge script script/add_liq.s.sol --legacy --rpc-url http://127.0.0.1:8545 --broadcast --private-key $PRIVATE_KEY -vvvv
+# forge script script/prelaunch.local.s.sol --legacy --rpc-url http://127.0.0.1:8545 --broadcast --private-key $PRIVATE_KEY -vvvv
+
 read -r -d '' _ </dev/tty
 echo "Closing Down Anvil"
 pkill -9 anvil

@@ -12,7 +12,7 @@ contract AddLiquidity is Script {
     function run() public {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
-        address swap = 0x2c07f69C7397A48B347550962935EEDf06A9f68F;
+        address swap = 0xF506637B46AD84AF0e3883985Ba60e7fE3568395;
 
         LpETH(payable(swap)).deposit{ value: 1000 ether }(0);
         vm.stopBroadcast();
