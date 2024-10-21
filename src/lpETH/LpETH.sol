@@ -248,7 +248,8 @@ contract LpETH is
         Adapter adapter = REGISTRY.adapters(asset);
         if (address(adapter) == address(0)) revert ErrorInvalidAsset(asset);
         SwapParams memory p = _getSwapParams(asset, adapter);
-        out = _quote(asset, amount, p);
+        uint256 ethExpected = adapter.previewWithdraw(amount);
+        out = _quote(asset, ethExpected, p);
     }
 
     function swap(address asset, uint256 amount, uint256 minOut) external nonreentrant returns (uint256 out) {

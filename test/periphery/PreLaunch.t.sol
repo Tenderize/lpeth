@@ -14,12 +14,17 @@ import {
 import { WETH } from "@solady/tokens/WETH.sol";
 import { UD60x18, ud } from "@prb/math/UD60x18.sol";
 import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import { LpETH } from "@/lpETH/LpETH.sol";
 
 contract PreLaunchHarness is PreLaunch {
     constructor(Config memory _config) PreLaunch(_config) { }
 
     function lpEthAddress() public view returns (address) {
         return lpEth;
+    }
+
+    function Harness_setLpEthreceived(uint256 _lpEthReceived) public {
+        lpEthReceived = _lpEthReceived;
     }
 }
 
@@ -41,6 +46,7 @@ contract PreLaunchTest is Test {
             minLockup: 1,
             maxLockup: 52,
             epochLength: 1 weeks,
+            minMultiplier: ud(1e17),
             maxMultiplier: ud(3e18),
             slope: ud(2e18)
         });
@@ -64,6 +70,7 @@ contract PreLaunchTest is Test {
         assertFalse(preLaunch.isClaimable());
         vm.startPrank(owner);
         preLaunch.setVotingEscrow(newVotingEscrow);
+        preLaunch.Harness_setLpEthreceived(1 ether);
         vm.stopPrank();
         assertTrue(preLaunch.isClaimable());
     }
@@ -89,7 +96,9 @@ contract PreLaunchTest is Test {
     function testMintLpEth() public {
         vm.startPrank(owner);
         preLaunch.setLpEth(payable(newLpEth));
+        vm.warp(config.deadline + 1);
         vm.deal(address(preLaunch), 1 ether);
+        vm.mockCall(newLpEth, abi.encodeWithSelector(LpETH.deposit.selector, 1 ether), abi.encode(1 ether));
         preLaunch.mintLpEth(1 ether);
         vm.stopPrank();
     }

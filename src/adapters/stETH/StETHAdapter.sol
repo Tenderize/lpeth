@@ -10,7 +10,7 @@ uint256 constant MIN_AMOUNT = 1e9;
 uint256 constant MAX_AMOUNT = 1000 ether;
 
 contract StETHAdapter is Adapter {
-    function previewWithdraw(uint256 amount) external view returns (uint256) {
+    function previewWithdraw(uint256 amount) external pure returns (uint256) {
         return amount;
     }
 

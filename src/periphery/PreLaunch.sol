@@ -28,6 +28,7 @@ struct Config {
     uint256 minLockup;
     uint256 maxLockup;
     uint256 epochLength;
+    UD60x18 minMultiplier;
     UD60x18 maxMultiplier;
     UD60x18 slope;
 }
@@ -42,12 +43,13 @@ contract PreLaunch is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     uint256 public immutable deadline; // Deadline for deposits
     UD60x18 internal immutable MIN_LOCKUP_DURATION;
     UD60x18 internal immutable MAX_LOCKUP_DURATION;
+    UD60x18 internal immutable MIN_MULTIPLIER;
     UD60x18 internal immutable MAX_MULTIPLIER;
     UD60x18 internal immutable SLOPE;
     uint256 internal immutable EPOCH_LENGTH;
 
-    uint256 totalWeightedDeposits; // Total weighted deposits
-    uint256 totalDeposits; // Total deposits
+    uint256 public totalWeightedDeposits; // Total weighted deposits
+    uint256 public totalDeposits; // Total deposits
     address public votingEscrow; // Voting escrow contract
     address payable lpEth; // LP token for lpETH
     uint96 claimableTimestamp; // Timestamp when deposits become claimable
@@ -60,6 +62,7 @@ contract PreLaunch is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         deadline = _config.deadline;
         MIN_LOCKUP_DURATION = UD60x18.wrap(_config.minLockup * 1e18);
         MAX_LOCKUP_DURATION = UD60x18.wrap(_config.maxLockup * 1e18);
+        MIN_MULTIPLIER = _config.minMultiplier;
         MAX_MULTIPLIER = _config.maxMultiplier;
         SLOPE = _config.slope;
         EPOCH_LENGTH = _config.epochLength;
@@ -226,7 +229,7 @@ contract PreLaunch is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             return 0;
         }
         return UD60x18.wrap(amount).mul(
-            MAX_MULTIPLIER.mul(
+            MIN_MULTIPLIER.add(MAX_MULTIPLIER.sub(MIN_MULTIPLIER)).mul(
                 durationUD.sub(MIN_LOCKUP_DURATION).div(MAX_LOCKUP_DURATION - MIN_LOCKUP_DURATION).pow(SLOPE)
             )
         ).unwrap();
