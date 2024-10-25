@@ -52,7 +52,7 @@ contract PreLaunch is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     uint256 public totalDeposits; // Total deposits
     address public votingEscrow; // Voting escrow contract
     address payable lpEth; // LP token for lpETH
-    uint96 claimableTimestamp; // Timestamp when deposits become claimable
+    uint96 public claimableTimestamp; // Timestamp when deposits become claimable
     uint256 lpEthReceived = 0;
 
     mapping(address account => Lockup) internal lockups;
@@ -80,12 +80,12 @@ contract PreLaunch is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         return lockups[account];
     }
 
-    function isActive() public view returns (bool) {
-        return block.timestamp <= deadline;
+    function isActive() public pure returns (bool) {
+        return false;
     }
 
     function isClaimable() public view returns (bool) {
-        return votingEscrow != address(0) && lpEthReceived > 0;
+        return lpEthReceived > 0;
     }
 
     function setLpEth(address payable _lpEth) external onlyOwner {
@@ -100,7 +100,6 @@ contract PreLaunch is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             revert();
         }
         votingEscrow = _votingEscrow;
-        claimableTimestamp = uint96(block.timestamp);
     }
 
     function mintLpEth(uint256 minLpShares) external onlyOwner {
@@ -114,6 +113,7 @@ contract PreLaunch is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
         uint256 lpShares = LpETH(lpEth).deposit{ value: address(this).balance }(minLpShares);
         lpEthReceived += lpShares;
+        claimableTimestamp = uint96(block.timestamp - 7 days);
     }
 
     function depositETH(uint256 duration) external payable {
@@ -214,9 +214,11 @@ contract PreLaunch is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         // Account for elapsed time since the deposits became claimable in epochs
         uint256 epochsElapsedSinceClaimable = (block.timestamp - claimableTimestamp) / EPOCH_LENGTH;
         uint256 lpEthAmount = lockup.amount * lpEthReceived / totalDeposits;
-        SafeTransferLib.safeApprove(lpEth, votingEscrow, lpEthAmount);
         if (lockup.duration > epochsElapsedSinceClaimable) {
-            VotingEscrow(votingEscrow).lockFor(msg.sender, lpEthAmount, lockup.duration - epochsElapsedSinceClaimable);
+            revert NotClaimable();
+            // SafeTransferLib.safeApprove(lpEth, votingEscrow, lpEthAmount);
+            // VotingEscrow(votingEscrow).lockFor(msg.sender, lpEthAmount, lockup.duration -
+            // epochsElapsedSinceClaimable);
         } else {
             ERC20(LpETH(lpEth).lpToken()).transfer(msg.sender, lpEthAmount);
         }

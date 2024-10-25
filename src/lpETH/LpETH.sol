@@ -40,10 +40,10 @@ import { UUPSUpgradeable } from "@openzeppelin/upgradeable/proxy/utils/UUPSUpgra
 
 uint256 constant UNSETH_EXPIRATION_TIME = 3 days + 12 hours;
 UD60x18 constant BASE_FEE = UD60x18.wrap(0.0005e18);
-UD60x18 constant K = UD60x18.wrap(4.5e18);
+UD60x18 constant K = UD60x18.wrap(3.5e18);
 UD60x18 constant RELAYER_CUT = UD60x18.wrap(0.025e18);
 UD60x18 constant TREASURY_CUT = UD60x18.wrap(0.2e18);
-UD60x18 constant MIN_LP_CUT = UD60x18.wrap(0.2e18);
+UD60x18 constant MIN_LP_CUT = UD60x18.wrap(0.33e18);
 
 struct ConstructorConfig {
     Registry registry;
@@ -244,15 +244,24 @@ contract LpETH is
         emit Withdraw(msg.sender, amount, lpShares, requestId);
     }
 
-    function quote(address asset, uint256 amount) external view returns (uint256 out) {
+    function quote(address asset, uint256 amount) external view returns (uint256 out, uint256 fee) {
         Adapter adapter = REGISTRY.adapters(asset);
         if (address(adapter) == address(0)) revert ErrorInvalidAsset(asset);
         SwapParams memory p = _getSwapParams(asset, adapter);
         uint256 ethExpected = adapter.previewWithdraw(amount);
         out = _quote(asset, ethExpected, p);
+        fee = ethExpected - out;
     }
 
-    function swap(address asset, uint256 amount, uint256 minOut) external nonreentrant returns (uint256 out) {
+    function swap(
+        address asset,
+        uint256 amount,
+        uint256 minOut
+    )
+        external
+        nonreentrant
+        returns (uint256 out, uint256 fee)
+    {
         Data storage $ = _loadStorageSlot();
         Adapter adapter = REGISTRY.adapters(asset);
         if (address(adapter) == address(0)) revert ErrorInvalidAsset(asset);
@@ -270,7 +279,7 @@ contract LpETH is
         (uint256 tokenId, uint256 amountExpected) = UNSETH.requestWithdraw(asset, amount);
 
         (out) = _quote(asset, amountExpected, p);
-        uint256 fee = amountExpected - out;
+        fee = amountExpected - out;
 
         // Revert if slippage threshold is exceeded, i.e. if `out` is less than `minOut`
         if (out < minOut) revert ErrorSlippage(out, minOut);

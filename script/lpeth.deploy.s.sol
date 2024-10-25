@@ -25,7 +25,7 @@ import { STETH_HOLDER } from "@test/adapters/StETHAdapter.t.sol";
 import { SWETH_HOLDER } from "@test/adapters/SwETHAdapter.t.sol";
 
 contract DeployLocal is Script {
-    bytes32 salt = bytes32(uint256(1));
+    bytes32 salt = bytes32(0x76302e312e300000000000000000000000000000000000000000000000000000); // "v0.1.0"
 
     function run() public {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
@@ -74,9 +74,10 @@ contract DeployLocal is Script {
         registryProxy.setAdapter(STETH_TOKEN, stETHAdapter);
         console2.log("StETH Adapter: %s", address(stETHAdapter));
 
-        // TODO: Tranfer ownership to SAFE
         address SAFE = 0x5542b58080FEE48dBE6f38ec0135cE9011519d96;
         lpETHProxy.transferOwnership(SAFE);
+        unsETHProxy.transferOwnership(SAFE);
+        registryProxy.transferOwnership(SAFE);
         vm.stopBroadcast();
     }
 }

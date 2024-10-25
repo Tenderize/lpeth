@@ -13,7 +13,7 @@ contract DeployPrelaunch is Script {
     function run() public {
         Config memory cfg = Config({
             cap: 80_000 ether,
-            deadline: block.timestamp + 4 weeks,
+            deadline: 1_728_746_087,
             minLockup: 1,
             maxLockup: 52,
             epochLength: 604_800,
