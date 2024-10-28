@@ -221,7 +221,7 @@ contract LpETH is
 
         uint256 available = ud(amount).mul(UNIT_60x18.sub(ud($.unlocking).div(ud($.liabilities)))).unwrap();
 
-        if (available < amount) {
+        if (available < amount && available > 0) {
             requestId = $.withdrawQueue.createRequest(uint128(amount - available), payable(msg.sender));
         }
 
@@ -233,7 +233,7 @@ contract LpETH is
         if (lpShares > maxLpSharesBurnt) revert ErrorSlippage(lpShares, maxLpSharesBurnt);
 
         // Update liabilities
-        $.liabilities -= amount;
+        $.liabilities -= available;
 
         // Burn LP tokens from the caller
         LPTOKEN.burn(msg.sender, lpShares);
@@ -567,7 +567,9 @@ contract LpETH is
     }
 
     function claimWithdrawRequest(uint256 id) external returns (uint256 amount) {
-        amount = _loadStorageSlot().withdrawQueue.claimRequest(id);
+        Data storage $ = _loadStorageSlot();
+        amount = $.withdrawQueue.claimRequest(id);
+        $.liabilities -= amount;
         emit ClaimWithdrawRequest(id, msg.sender, amount);
     }
 
@@ -650,6 +652,9 @@ contract LpETH is
 
         UD60x18 gauge = getFeeGauge(asset);
         // total fee = gauge x (baseFee * amount + nom/denom)
+        if ($.liabilities <= $.unlocking) {
+            return 0;
+        }
         uint256 fee = BASE_FEE.mul(x).add(nom.div(denom)).mul(gauge).unwrap();
         fee = fee >= amount ? amount : fee;
         unchecked {
