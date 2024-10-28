@@ -219,7 +219,10 @@ contract LpETH is
         }
         Data storage $ = _loadStorageSlot();
 
-        uint256 available = ud(amount).mul(UNIT_60x18.sub(ud($.unlocking).div(ud($.liabilities)))).unwrap();
+        uint256 available = $.liabilities - $.unlocking;
+        if (available > amount) available = amount;
+
+        ud(amount).mul(UNIT_60x18.sub(ud($.unlocking).div(ud($.liabilities)))).unwrap();
 
         if (available < amount && available > 0) {
             requestId = $.withdrawQueue.createRequest(uint128(amount - available), payable(msg.sender));
