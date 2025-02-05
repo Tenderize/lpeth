@@ -99,7 +99,7 @@ contract LPETH_Test is Test, ERC721Receiver {
 
         token1.mint(address(this), 250 ether);
         token1.approve(address(lpETH), 250 ether);
-        uint256 out = lpETH.swap(address(token1), 250 ether, 0);
+        (uint256 out,) = lpETH.swap(address(token1), 250 ether, 0);
 
         // ==== END SETUP ====
 
@@ -168,11 +168,11 @@ contract LPETH_Test is Test, ERC721Receiver {
 
         token1.mint(address(this), 250 ether);
         // ==== END SETUP ====
-        uint256 quote_out = lpETH.quote(address(token1), swapAmount);
+        (uint256 quote_out,) = lpETH.quote(address(token1), swapAmount);
         token1.approve(address(lpETH), swapAmount);
         uint256 eth_balance_before = address(this).balance;
         uint256 token1_balance_before = token1.balanceOf(address(this));
-        uint256 out = lpETH.swap(address(token1), swapAmount, 0);
+        (uint256 out,) = lpETH.swap(address(token1), swapAmount, 0);
 
         assertTrue(out < swapAmount);
         assertEq(quote_out, out);

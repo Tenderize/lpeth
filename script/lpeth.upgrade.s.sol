@@ -25,7 +25,7 @@ import { STETH_HOLDER } from "@test/adapters/StETHAdapter.t.sol";
 import { SWETH_HOLDER } from "@test/adapters/SwETHAdapter.t.sol";
 
 contract DeployLocal is Script {
-    bytes32 salt = bytes32(0x76302e312e300000000000000000000000000000000000000000000000000000); // "v0.1.0"
+    bytes32 salt = bytes32(0x76302e312e310000000000000000000000000000000000000000000000000000); // "v0.1.1"
 
     function run() public {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
