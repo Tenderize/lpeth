@@ -6,7 +6,6 @@ library AdapterDelegateCall {
     function _delegatecall(Adapter adapter, bytes memory data) internal returns (bytes memory) {
         // solhint-disable-next-line avoid-low-level-calls
         (bool success, bytes memory returnData) = address(adapter).delegatecall(data);
-
         if (!success) {
             if (returnData.length < 4) {
                 revert AdapterDelegateCallFailed("Unknown error occurred");
