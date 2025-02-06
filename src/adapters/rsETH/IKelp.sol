@@ -20,8 +20,8 @@ interface Withdrawals {
         external
         view
         returns (uint256 underlyingToReceive);
-    function initiateWithdrawal(address asset, uint256 rsETHUnstaked) external;
-    function completeWithdrawal(address asset) external;
+    function initiateWithdrawal(address asset, uint256 rsETHUnstaked, string calldata referralId) external;
+    function completeWithdrawal(address asset, string calldata referralId) external;
     function getAvailableAssetAmount(address asset) external view returns (uint256 availableAssetAmount);
     function withdrawalRequests(bytes32 id) external view returns (WithdrawalRequest memory);
 }

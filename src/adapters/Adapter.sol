@@ -1,12 +1,15 @@
 pragma solidity >=0.8.25;
 
+import { console } from "forge-std/console.sol";
+
 library AdapterDelegateCall {
     error AdapterDelegateCallFailed(string msg);
 
     function _delegatecall(Adapter adapter, bytes memory data) internal returns (bytes memory) {
         // solhint-disable-next-line avoid-low-level-calls
         (bool success, bytes memory returnData) = address(adapter).delegatecall(data);
-
+        console.log("success %s", success);
+        console.log("returnData %s", string(returnData));
         if (!success) {
             if (returnData.length < 4) {
                 revert AdapterDelegateCallFailed("Unknown error occurred");
